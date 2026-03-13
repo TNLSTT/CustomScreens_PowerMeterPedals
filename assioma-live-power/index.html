@@ -20,7 +20,15 @@
         <p class="unit">bpm</p>
       </section>
 
-      <section class="rolling-averages" aria-label="Rolling average power">
+      <section class="rolling-averages" aria-label="Rolling average power and heart rate">
+        <article class="avg-card">
+          <p class="avg-label">1 min avg</p>
+          <p id="avg1m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg1m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr1m" class="avg-sub-value">--</p>
+        </article>
         <article class="avg-card">
           <p class="avg-label">3 min avg</p>
           <p id="avg3m" class="avg-value">--</p>
@@ -44,6 +52,35 @@
           <p id="hrAvg10m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">watts / bpm</p>
           <p id="wpHr10m" class="avg-sub-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">20 min avg</p>
+          <p id="avg20m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg20m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr20m" class="avg-sub-value">--</p>
+        </article>
+      </section>
+
+      <section class="breath-guidance" aria-label="Breathing metrics">
+        <article class="avg-card">
+          <p class="avg-label">Breathing</p>
+          <p class="avg-sub-label">Current est. br/min</p>
+          <p id="breathsPerMinute" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">Last 3m breaths / kJ</p>
+          <p id="breathsPerKj3m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">Ride breaths / kJ</p>
+          <p id="breathsPerKjRide" class="avg-sub-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">135 BPM Guidance</p>
+          <p class="avg-sub-label">Current ride avg HR</p>
+          <p id="rideAvgHr" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">Remaining work</p>
+          <p id="remainingWorkGuidance" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">Suggested watts now</p>
+          <p id="targetGuidanceWatts" class="avg-sub-value">--</p>
         </article>
       </section>
 
@@ -89,6 +126,6 @@
       </section>
     </main>
 
-    <script src="app.js" defer></script>
+    <script src="app.js"></script>
   </body>
 </html>

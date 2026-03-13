@@ -4,21 +4,38 @@ const CYCLING_POWER_MEASUREMENT_CHAR = 0x2a63;
 const HEART_RATE_SERVICE = 0x180d;
 const HEART_RATE_MEASUREMENT_CHAR = 0x2a37;
 
+const MAX_AUTO_RECONNECT_ATTEMPTS = 5;
+const AUTO_RECONNECT_INTERVAL_MS = 3000;
+const TARGET_RIDE_AVG_HEART_RATE = 135;
+const BREATHS_PER_BEAT_FACTOR = 0.26;
+
 const connectBtn = document.getElementById("connectBtn");
 const connectHrBtn = document.getElementById("connectHrBtn");
 const buttonGridEl = document.querySelector(".button-grid");
 const wattsEl = document.getElementById("watts");
 const heartRateEl = document.getElementById("heartRate");
 const statusEl = document.getElementById("status");
+const avg1mEl = document.getElementById("avg1m");
 const avg3mEl = document.getElementById("avg3m");
 const avg5mEl = document.getElementById("avg5m");
 const avg10mEl = document.getElementById("avg10m");
+const avg20mEl = document.getElementById("avg20m");
+const hrAvg1mEl = document.getElementById("hrAvg1m");
 const hrAvg3mEl = document.getElementById("hrAvg3m");
 const hrAvg5mEl = document.getElementById("hrAvg5m");
 const hrAvg10mEl = document.getElementById("hrAvg10m");
+const hrAvg20mEl = document.getElementById("hrAvg20m");
+const wpHr1mEl = document.getElementById("wpHr1m");
 const wpHr3mEl = document.getElementById("wpHr3m");
 const wpHr5mEl = document.getElementById("wpHr5m");
 const wpHr10mEl = document.getElementById("wpHr10m");
+const wpHr20mEl = document.getElementById("wpHr20m");
+const breathsPerMinuteEl = document.getElementById("breathsPerMinute");
+const breathsPerKj3mEl = document.getElementById("breathsPerKj3m");
+const breathsPerKjRideEl = document.getElementById("breathsPerKjRide");
+const rideAvgHrEl = document.getElementById("rideAvgHr");
+const remainingWorkGuidanceEl = document.getElementById("remainingWorkGuidance");
+const targetGuidanceWattsEl = document.getElementById("targetGuidanceWatts");
 const targetKjEl = document.getElementById("targetKj");
 const startRideBtn = document.getElementById("startRideBtn");
 const rideDoneEl = document.getElementById("rideDone");
@@ -30,13 +47,18 @@ const rideProgressTrackEl = rideProgressFillEl?.parentElement;
 const rollingSamples = [];
 const powerSamples = [];
 const WINDOWS_IN_MS = {
+  "1m": 1 * 60 * 1000,
   "3m": 3 * 60 * 1000,
   "5m": 5 * 60 * 1000,
   "10m": 10 * 60 * 1000,
+  "20m": 20 * 60 * 1000,
 };
+const MAX_WINDOW_MS = WINDOWS_IN_MS["20m"];
 
 let powerDevice;
 let heartRateDevice;
+let powerCharacteristic;
+let heartRateCharacteristic;
 let latestPowerWatts = null;
 let latestHeartRateBpm = null;
 let rideState = null;
@@ -69,20 +91,7 @@ async function connectPowerMeter() {
 
     powerDevice.addEventListener("gattserverdisconnected", onPowerDisconnected);
 
-    setStatus(`Connecting to ${powerDevice.name || "power meter"}...`);
-
-    const server = await powerDevice.gatt.connect();
-    const service = await server.getPrimaryService(CYCLING_POWER_SERVICE);
-    const characteristic = await service.getCharacteristic(
-      CYCLING_POWER_MEASUREMENT_CHAR,
-    );
-
-    await characteristic.startNotifications();
-    characteristic.addEventListener(
-      "characteristicvaluechanged",
-      handlePowerNotification,
-    );
-
+    await establishPowerConnection();
     powerConnected = true;
     updateConnectionButtonLayout();
     setStatus(`Connected to ${powerDevice.name || "power meter"}`);
@@ -114,20 +123,7 @@ async function connectHeartRateMonitor() {
       onHeartRateDisconnected,
     );
 
-    setStatus(`Connecting to ${heartRateDevice.name || "heart rate monitor"}...`);
-
-    const server = await heartRateDevice.gatt.connect();
-    const service = await server.getPrimaryService(HEART_RATE_SERVICE);
-    const characteristic = await service.getCharacteristic(
-      HEART_RATE_MEASUREMENT_CHAR,
-    );
-
-    await characteristic.startNotifications();
-    characteristic.addEventListener(
-      "characteristicvaluechanged",
-      handleHeartRateNotification,
-    );
-
+    await establishHeartRateConnection();
     heartRateConnected = true;
     updateConnectionButtonLayout();
     setStatus(`Connected to ${heartRateDevice.name || "heart rate monitor"}`);
@@ -139,6 +135,28 @@ async function connectHeartRateMonitor() {
   }
 }
 
+async function establishPowerConnection() {
+  setStatus(`Connecting to ${powerDevice.name || "power meter"}...`);
+  const server = await powerDevice.gatt.connect();
+  const service = await server.getPrimaryService(CYCLING_POWER_SERVICE);
+  powerCharacteristic = await service.getCharacteristic(CYCLING_POWER_MEASUREMENT_CHAR);
+
+  await powerCharacteristic.startNotifications();
+  powerCharacteristic.removeEventListener("characteristicvaluechanged", handlePowerNotification);
+  powerCharacteristic.addEventListener("characteristicvaluechanged", handlePowerNotification);
+}
+
+async function establishHeartRateConnection() {
+  setStatus(`Connecting to ${heartRateDevice.name || "heart rate monitor"}...`);
+  const server = await heartRateDevice.gatt.connect();
+  const service = await server.getPrimaryService(HEART_RATE_SERVICE);
+  heartRateCharacteristic = await service.getCharacteristic(HEART_RATE_MEASUREMENT_CHAR);
+
+  await heartRateCharacteristic.startNotifications();
+  heartRateCharacteristic.removeEventListener("characteristicvaluechanged", handleHeartRateNotification);
+  heartRateCharacteristic.addEventListener("characteristicvaluechanged", handleHeartRateNotification);
+}
+
 function updateConnectionButtonLayout() {
   if (!buttonGridEl) {
     return;
@@ -147,8 +165,6 @@ function updateConnectionButtonLayout() {
   const isAnyConnected = powerConnected || heartRateConnected;
   buttonGridEl.classList.toggle("compact", isAnyConnected);
 }
-
-
 
 function startRideRecording() {
   const targetKj = Number(targetKjEl.value);
@@ -163,10 +179,14 @@ function startRideRecording() {
     startTimestamp: Date.now(),
     doneKj: 0,
     completed: false,
+    totalBreaths: 0,
+    hrSum: 0,
+    hrCount: 0,
   };
   lastPowerSampleTimestamp = null;
 
   setStatus(`Ride recording started for ${Math.round(targetKj)} kJ target.`);
+  updateStartButtonVisibility();
   updateRideProgressUi();
 }
 
@@ -220,6 +240,9 @@ function updateRideProgressUi() {
     rideEtaEl.textContent = "ETA: --";
     rideProgressFillEl.style.width = "0%";
     rideProgressTrackEl?.setAttribute("aria-valuenow", "0");
+    updateBreathingMetrics();
+    updateGuidancePanel();
+    updateStartButtonVisibility();
     return;
   }
 
@@ -234,11 +257,23 @@ function updateRideProgressUi() {
   rideEtaEl.textContent = stats.remainingKj <= 0 ? "ETA: Completed" : `ETA: ${formatDuration(stats.etaSeconds)}`;
   rideProgressFillEl.style.width = `${percent.toFixed(1)}%`;
   rideProgressTrackEl?.setAttribute("aria-valuenow", percent.toFixed(1));
+  updateBreathingMetrics();
+  updateGuidancePanel();
+  updateStartButtonVisibility();
 
   if (stats.remainingKj <= 0 && !rideState.completed) {
     rideState.completed = true;
     setStatus(`Ride target complete: ${rideState.targetKj} kJ done.`);
   }
+}
+
+function updateStartButtonVisibility() {
+  if (!startRideBtn) {
+    return;
+  }
+
+  const isRecording = Boolean(rideState && !rideState.completed);
+  startRideBtn.style.display = isRecording ? "none" : "inline-flex";
 }
 
 function handlePowerNotification(event) {
@@ -263,7 +298,7 @@ function addPowerSample(watts, timestamp) {
 }
 
 function prunePowerSamples(now) {
-  const oldestAllowed = now - WINDOWS_IN_MS["10m"];
+  const oldestAllowed = now - MAX_WINDOW_MS;
   while (powerSamples.length > 0 && powerSamples[0].timestamp < oldestAllowed) {
     powerSamples.shift();
   }
@@ -294,6 +329,12 @@ function handleHeartRateNotification(event) {
 
   latestHeartRateBpm = heartRate;
   heartRateEl.textContent = heartRate;
+
+  if (rideState) {
+    rideState.hrSum += heartRate;
+    rideState.hrCount += 1;
+  }
+
   maybeAddRollingSample();
   updateRollingAverages();
   updateRideProgressUi();
@@ -308,6 +349,7 @@ function maybeAddRollingSample() {
   rollingSamples.push({
     watts: latestPowerWatts,
     heartRate: latestHeartRateBpm,
+    breathsPerMinute: estimateBreathsPerMinute(latestHeartRateBpm),
     timestamp: now,
   });
 
@@ -315,7 +357,7 @@ function maybeAddRollingSample() {
 }
 
 function pruneRollingSamples(now) {
-  const oldestAllowed = now - WINDOWS_IN_MS["10m"];
+  const oldestAllowed = now - MAX_WINDOW_MS;
   while (rollingSamples.length > 0 && rollingSamples[0].timestamp < oldestAllowed) {
     rollingSamples.shift();
   }
@@ -325,9 +367,13 @@ function updateRollingAverages() {
   const now = Date.now();
   pruneRollingSamples(now);
 
+  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, hrAvg1mEl, wpHr1mEl);
   setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, hrAvg3mEl, wpHr3mEl);
   setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, hrAvg5mEl, wpHr5mEl);
   setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, hrAvg10mEl, wpHr10mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, hrAvg20mEl, wpHr20mEl);
+  updateBreathingMetrics();
+  updateGuidancePanel();
 }
 
 function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, wpHrEl) {
@@ -361,19 +407,171 @@ function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, wpHrEl) {
   wpHrEl.textContent = wattsPerHeartRate.toFixed(2);
 }
 
-function onPowerDisconnected() {
-  powerConnected = false;
-  updateConnectionButtonLayout();
-  setStatus("Power meter disconnected. Reconnect to continue.");
-  connectBtn.disabled = false;
+function estimateBreathsPerMinute(heartRate) {
+  if (!Number.isFinite(heartRate) || heartRate <= 0) {
+    return null;
+  }
+
+  return heartRate * BREATHS_PER_BEAT_FACTOR;
 }
 
-function onHeartRateDisconnected() {
+function updateBreathingMetrics() {
+  const estBpm = estimateBreathsPerMinute(latestHeartRateBpm);
+  breathsPerMinuteEl.textContent = estBpm == null ? "--" : estBpm.toFixed(1);
+
+  const now = Date.now();
+  const start3m = now - WINDOWS_IN_MS["3m"];
+  const samples3m = rollingSamples.filter((sample) => sample.timestamp >= start3m);
+
+  if (samples3m.length < 2) {
+    breathsPerKj3mEl.textContent = "--";
+  } else {
+    const breaths3m = getEstimatedBreathsFromSamples(samples3m);
+    const avgPower3m = getWindowAveragePower(now, WINDOWS_IN_MS["3m"]);
+    const durationSec = (samples3m[samples3m.length - 1].timestamp - samples3m[0].timestamp) / 1000;
+    const kj3m = avgPower3m && durationSec > 0 ? (avgPower3m * durationSec) / 1000 : 0;
+    breathsPerKj3mEl.textContent = kj3m > 0 ? (breaths3m / kj3m).toFixed(1) : "--";
+  }
+
+  if (!rideState || rideState.doneKj <= 0) {
+    breathsPerKjRideEl.textContent = "--";
+    return;
+  }
+
+  breathsPerKjRideEl.textContent = (rideState.totalBreaths / rideState.doneKj).toFixed(1);
+}
+
+function getEstimatedBreathsFromSamples(samples) {
+  let totalBreaths = 0;
+
+  for (let i = 1; i < samples.length; i += 1) {
+    const current = samples[i];
+    const prev = samples[i - 1];
+    const elapsedMin = Math.max(0, (current.timestamp - prev.timestamp) / 60000);
+    totalBreaths += current.breathsPerMinute * elapsedMin;
+  }
+
+  return totalBreaths;
+}
+
+function updateGuidancePanel() {
+  if (!rideState) {
+    rideAvgHrEl.textContent = "--";
+    remainingWorkGuidanceEl.textContent = "--";
+    targetGuidanceWattsEl.textContent = "--";
+    return;
+  }
+
+  const rideAvgHr = rideState.hrCount > 0 ? rideState.hrSum / rideState.hrCount : null;
+  const remainingKj = Math.max(rideState.targetKj - rideState.doneKj, 0);
+  rideAvgHrEl.textContent = rideAvgHr == null ? "--" : `${rideAvgHr.toFixed(1)} bpm`;
+  remainingWorkGuidanceEl.textContent = `${remainingKj.toFixed(1)} kJ`;
+
+  const suggestion = computeSuggestedWattsForTargetHr(rideAvgHr, remainingKj);
+  targetGuidanceWattsEl.textContent = suggestion == null ? "--" : `${Math.round(suggestion)} W`;
+}
+
+function computeSuggestedWattsForTargetHr(rideAvgHr, remainingKj) {
+  if (rideAvgHr == null || remainingKj <= 0) {
+    return null;
+  }
+
+  const now = Date.now();
+  const avg5mHr = getWindowAverageHeartRate(now, WINDOWS_IN_MS["5m"]);
+  const avg5mWatts = getWindowAveragePower(now, WINDOWS_IN_MS["5m"]);
+
+  if (avg5mHr == null || avg5mWatts == null || avg5mWatts <= 0) {
+    return null;
+  }
+
+  const hrDrift = TARGET_RIDE_AVG_HEART_RATE - rideAvgHr;
+  const targetHrNow = avg5mHr + hrDrift;
+  const wattsPerBpm = avg5mWatts / avg5mHr;
+
+  if (!Number.isFinite(wattsPerBpm) || wattsPerBpm <= 0) {
+    return null;
+  }
+
+  const estimatedWatts = targetHrNow * wattsPerBpm;
+  const upperBound = Math.max(avg5mWatts * 1.35, 80);
+  const lowerBound = Math.max(avg5mWatts * 0.65, 50);
+  return Math.min(upperBound, Math.max(lowerBound, estimatedWatts));
+}
+
+function getWindowAverageHeartRate(now, windowMs) {
+  const startTime = now - windowMs;
+  const samplesInWindow = rollingSamples.filter((sample) => sample.timestamp >= startTime);
+
+  if (samplesInWindow.length === 0) {
+    return null;
+  }
+
+  const totalHeartRate = samplesInWindow.reduce((sum, sample) => sum + sample.heartRate, 0);
+  return totalHeartRate / samplesInWindow.length;
+}
+
+async function onPowerDisconnected() {
+  powerConnected = false;
+  updateConnectionButtonLayout();
+  setStatus("Power meter disconnected. Attempting to reconnect...");
+  connectBtn.disabled = false;
+
+  const recovered = await tryAutoReconnect(establishPowerConnection, "power meter");
+  if (recovered) {
+    powerConnected = true;
+    connectBtn.disabled = true;
+    updateConnectionButtonLayout();
+  }
+}
+
+async function onHeartRateDisconnected() {
   heartRateConnected = false;
   updateConnectionButtonLayout();
-  setStatus("Heart rate monitor disconnected. Reconnect to continue.");
+  setStatus("Heart rate monitor disconnected. Attempting to reconnect...");
   connectHrBtn.disabled = false;
+
+  const recovered = await tryAutoReconnect(establishHeartRateConnection, "heart rate monitor");
+  if (recovered) {
+    heartRateConnected = true;
+    connectHrBtn.disabled = true;
+    updateConnectionButtonLayout();
+  }
 }
+
+async function tryAutoReconnect(connectionFn, label) {
+  for (let attempt = 1; attempt <= MAX_AUTO_RECONNECT_ATTEMPTS; attempt += 1) {
+    try {
+      await delay(AUTO_RECONNECT_INTERVAL_MS);
+      await connectionFn();
+      setStatus(`Reconnected to ${label}.`);
+      return true;
+    } catch (error) {
+      setStatus(`Reconnect attempt ${attempt}/${MAX_AUTO_RECONNECT_ATTEMPTS} failed for ${label}.`);
+    }
+  }
+
+  setStatus(`Unable to auto-reconnect ${label}. Please reconnect manually.`);
+  return false;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+setInterval(() => {
+  if (!rideState || latestHeartRateBpm == null || latestPowerWatts == null) {
+    return;
+  }
+
+  const breathsPerMinute = estimateBreathsPerMinute(latestHeartRateBpm);
+  if (breathsPerMinute == null) {
+    return;
+  }
+
+  rideState.totalBreaths += breathsPerMinute / 60;
+}, 1000);
 
 function setStatus(message) {
   statusEl.textContent = message;

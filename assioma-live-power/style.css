@@ -20,7 +20,7 @@ body {
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-rows: repeat(2, auto) auto auto auto auto auto;
+  grid-template-rows: repeat(2, auto) auto auto auto auto auto auto;
   align-content: start;
   gap: clamp(0.35rem, 0.8vh, 0.75rem);
   padding: clamp(0.65rem, 1.7vh, 1.25rem) clamp(0.8rem, 2.1vw, 1.5rem);
@@ -59,9 +59,15 @@ body {
 
 .rolling-averages {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(0.6rem, 1.1vw, 1.1rem);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: clamp(0.45rem, 1.1vw, 1rem);
   margin: 0.2rem 0;
+}
+
+.breath-guidance {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.45rem, 1.1vw, 1rem);
 }
 
 .avg-card {
@@ -73,7 +79,7 @@ body {
 
 .avg-label {
   margin: 0;
-  font-size: clamp(0.85rem, 1.2vw, 1.2rem);
+  font-size: clamp(0.85rem, 1.1vw, 1.1rem);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #94a3b8;
@@ -81,7 +87,7 @@ body {
 
 .avg-value {
   margin: 0.15rem 0 0.2rem;
-  font-size: clamp(1.7rem, 3.6vh, 2.9rem);
+  font-size: clamp(1.55rem, 3.2vh, 2.6rem);
   font-weight: 800;
   color: #f8fafc;
   line-height: 1;
@@ -89,7 +95,7 @@ body {
 
 .avg-sub-label {
   margin: 0.25rem 0 0;
-  font-size: clamp(0.72rem, 0.95vw, 1rem);
+  font-size: clamp(0.67rem, 0.85vw, 0.92rem);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #7dd3fc;
@@ -97,7 +103,7 @@ body {
 
 .avg-sub-value {
   margin: 0.15rem 0 0;
-  font-size: clamp(1rem, 2.5vh, 1.65rem);
+  font-size: clamp(0.95rem, 2vh, 1.3rem);
   font-weight: 700;
   color: #e2e8f0;
   line-height: 1.05;
@@ -240,6 +246,12 @@ body {
   transition: width 0.4s ease;
 }
 
+@media (max-width: 1200px) {
+  .rolling-averages {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   body {
     overflow-y: auto;
@@ -251,7 +263,8 @@ body {
     overflow: visible;
   }
 
-  .rolling-averages {
+  .rolling-averages,
+  .breath-guidance {
     grid-template-columns: 1fr;
   }
 
@@ -276,10 +289,5 @@ body {
     border-radius: 0.6rem;
     padding: 0.72rem 1rem;
     font-size: 0.98rem;
-  }
-
-  .watts,
-  .heart-rate {
-    font-size: clamp(4rem, 24vw, 7.2rem);
   }
 }
