@@ -2,9 +2,9 @@
 
 A minimal Web Bluetooth dashboard that connects to a cycling power meter (such as Favero Assioma pedals) and displays live watts.
 
-It also shows rolling average power for the last **3**, **5**, and **10** minutes, plus rolling average heart rate and watts per heart rate over those same windows.
+It also shows rolling average power for the last **1**, **3**, **5**, **10**, and **20** minutes, plus rolling average heart rate and watts per heart rate over those same windows.
 
-It also includes ride programming by target kilojoules (kJ), a ride recording start control, and a bottom progress bar with kJ done, kJ remaining, and ETA based on the last 3-minute average power.
+It also includes ride programming by target kilojoules (kJ), a ride recording control that hides once active, auto-reconnect attempts if pedals/heart rate disconnect, estimated breathing metrics (breaths/min and breaths per kJ), plus a 135 BPM guidance panel that suggests target watts from recent 5-minute response and ride-remaining work.
 
 ## 1) Setup instructions
 
