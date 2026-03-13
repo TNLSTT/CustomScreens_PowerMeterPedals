@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Power Meter</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="dashboard">
+      <p class="label">Current Power</p>
+      <div id="watts" class="watts" aria-live="polite">--</div>
+      <p class="unit">watts</p>
+
+      <button id="connectBtn" class="connect-btn" type="button">
+        Connect Assioma Pedals
+      </button>
+
+      <p id="status" class="status">Not connected</p>
+    </main>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
