@@ -8,28 +8,53 @@
   </head>
   <body>
     <main class="dashboard">
-      <p class="label">Current Power</p>
-      <div id="watts" class="watts" aria-live="polite">--</div>
-      <p class="unit">watts</p>
+      <section class="metric-block" aria-label="Current power">
+        <p class="label">Current Power</p>
+        <div id="watts" class="watts" aria-live="polite">--</div>
+        <p class="unit">watts</p>
+      </section>
+
+      <section class="metric-block" aria-label="Current heart rate">
+        <p class="label">Current Heart Rate</p>
+        <div id="heartRate" class="heart-rate" aria-live="polite">--</div>
+        <p class="unit">bpm</p>
+      </section>
 
       <section class="rolling-averages" aria-label="Rolling average power">
         <article class="avg-card">
           <p class="avg-label">3 min avg</p>
           <p id="avg3m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg3m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr3m" class="avg-sub-value">--</p>
         </article>
         <article class="avg-card">
           <p class="avg-label">5 min avg</p>
           <p id="avg5m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg5m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr5m" class="avg-sub-value">--</p>
         </article>
         <article class="avg-card">
           <p class="avg-label">10 min avg</p>
           <p id="avg10m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg10m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr10m" class="avg-sub-value">--</p>
         </article>
       </section>
 
-      <button id="connectBtn" class="connect-btn" type="button">
-        Connect Assioma Pedals
-      </button>
+      <div class="button-grid">
+        <button id="connectBtn" class="connect-btn" type="button">
+          Connect Assioma Pedals
+        </button>
+        <button id="connectHrBtn" class="connect-btn secondary" type="button">
+          Connect Heart Rate Monitor
+        </button>
+      </div>
 
       <p id="status" class="status">Not connected</p>
     </main>

@@ -18,7 +18,7 @@ body {
 }
 
 .dashboard {
-  width: min(90vw, 480px);
+  width: min(92vw, 640px);
   text-align: center;
   padding: 2rem;
   border-radius: 1rem;
@@ -27,34 +27,40 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
+.metric-block + .metric-block {
+  margin-top: 1rem;
+}
+
 .label {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.9rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #94a3b8;
 }
 
-.watts {
-  margin: 0.5rem 0 0;
-  font-size: clamp(6rem, 18vw, 9rem);
+.watts,
+.heart-rate {
+  margin: 0.45rem 0 0;
+  font-size: clamp(3.2rem, 11vw, 5rem);
   font-weight: 700;
   line-height: 1;
   color: #f8fafc;
 }
 
 .unit {
-  margin: 0.4rem 0 1.5rem;
+  margin: 0.35rem 0 1.1rem;
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  font-size: 0.82rem;
 }
 
 .rolling-averages {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.7rem;
-  margin-bottom: 1.4rem;
+  margin: 0.5rem 0 1.4rem;
 }
 
 .avg-card {
@@ -73,10 +79,31 @@ body {
 }
 
 .avg-value {
-  margin: 0.35rem 0 0;
+  margin: 0.35rem 0 0.45rem;
   font-size: 1.35rem;
   font-weight: 700;
   color: #f8fafc;
+}
+
+.avg-sub-label {
+  margin: 0.45rem 0 0;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #7dd3fc;
+}
+
+.avg-sub-value {
+  margin: 0.18rem 0 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.button-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.6rem;
 }
 
 .connect-btn {
@@ -95,6 +122,14 @@ body {
   background: #67e8f9;
 }
 
+.connect-btn.secondary {
+  background: #c4b5fd;
+}
+
+.connect-btn.secondary:hover {
+  background: #ddd6fe;
+}
+
 .connect-btn:disabled {
   cursor: progress;
   opacity: 0.7;
@@ -107,7 +142,7 @@ body {
   color: #cbd5e1;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 680px) {
   .rolling-averages {
     grid-template-columns: 1fr;
   }
