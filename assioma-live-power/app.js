@@ -6,6 +6,7 @@ const HEART_RATE_MEASUREMENT_CHAR = 0x2a37;
 
 const connectBtn = document.getElementById("connectBtn");
 const connectHrBtn = document.getElementById("connectHrBtn");
+const buttonGridEl = document.querySelector(".button-grid");
 const wattsEl = document.getElementById("watts");
 const heartRateEl = document.getElementById("heartRate");
 const statusEl = document.getElementById("status");
@@ -40,11 +41,14 @@ let latestPowerWatts = null;
 let latestHeartRateBpm = null;
 let rideState = null;
 let lastPowerSampleTimestamp = null;
+let powerConnected = false;
+let heartRateConnected = false;
 
 connectBtn.addEventListener("click", connectPowerMeter);
 connectHrBtn.addEventListener("click", connectHeartRateMonitor);
 startRideBtn.addEventListener("click", startRideRecording);
 
+updateConnectionButtonLayout();
 updateRideProgressUi();
 setInterval(updateRideProgressUi, 1000);
 
@@ -79,8 +83,12 @@ async function connectPowerMeter() {
       handlePowerNotification,
     );
 
+    powerConnected = true;
+    updateConnectionButtonLayout();
     setStatus(`Connected to ${powerDevice.name || "power meter"}`);
   } catch (error) {
+    powerConnected = false;
+    updateConnectionButtonLayout();
     setStatus(`Power meter connection failed: ${error.message}`);
     connectBtn.disabled = false;
   }
@@ -120,12 +128,26 @@ async function connectHeartRateMonitor() {
       handleHeartRateNotification,
     );
 
+    heartRateConnected = true;
+    updateConnectionButtonLayout();
     setStatus(`Connected to ${heartRateDevice.name || "heart rate monitor"}`);
   } catch (error) {
+    heartRateConnected = false;
+    updateConnectionButtonLayout();
     setStatus(`Heart rate monitor connection failed: ${error.message}`);
     connectHrBtn.disabled = false;
   }
 }
+
+function updateConnectionButtonLayout() {
+  if (!buttonGridEl) {
+    return;
+  }
+
+  const isAnyConnected = powerConnected || heartRateConnected;
+  buttonGridEl.classList.toggle("compact", isAnyConnected);
+}
+
 
 
 function startRideRecording() {
@@ -340,11 +362,15 @@ function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, wpHrEl) {
 }
 
 function onPowerDisconnected() {
+  powerConnected = false;
+  updateConnectionButtonLayout();
   setStatus("Power meter disconnected. Reconnect to continue.");
   connectBtn.disabled = false;
 }
 
 function onHeartRateDisconnected() {
+  heartRateConnected = false;
+  updateConnectionButtonLayout();
   setStatus("Heart rate monitor disconnected. Reconnect to continue.");
   connectHrBtn.disabled = false;
 }
