@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Live Power Meter</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="dashboard">
+      <section class="metric-block" aria-label="Current power">
+        <p class="label">Current Power</p>
+        <div id="watts" class="watts" aria-live="polite">--</div>
+        <p class="unit">watts</p>
+      </section>
+
+      <section class="metric-block" aria-label="Current heart rate">
+        <p class="label">Current Heart Rate</p>
+        <div id="heartRate" class="heart-rate" aria-live="polite">--</div>
+        <p class="unit">bpm</p>
+      </section>
+
+      <section class="rolling-averages" aria-label="Rolling average power and heart rate">
+        <article class="avg-card">
+          <p class="avg-label">1 min avg</p>
+          <p id="avg1m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg1m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr1m" class="avg-sub-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">3 min avg</p>
+          <p id="avg3m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg3m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr3m" class="avg-sub-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">5 min avg</p>
+          <p id="avg5m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg5m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr5m" class="avg-sub-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">10 min avg</p>
+          <p id="avg10m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg10m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr10m" class="avg-sub-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">20 min avg</p>
+          <p id="avg20m" class="avg-value">--</p>
+          <p class="avg-sub-label">heart rate</p>
+          <p id="hrAvg20m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">watts / bpm</p>
+          <p id="wpHr20m" class="avg-sub-value">--</p>
+        </article>
+      </section>
+
+      <section class="breath-guidance" aria-label="Breathing metrics">
+        <article class="avg-card">
+          <p class="avg-label">Breathing</p>
+          <p class="avg-sub-label">Current est. br/min</p>
+          <p id="breathsPerMinute" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">Last 3m breaths / kJ</p>
+          <p id="breathsPerKj3m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">Ride breaths / kJ</p>
+          <p id="breathsPerKjRide" class="avg-sub-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">135 BPM Guidance</p>
+          <p class="avg-sub-label">Current ride avg HR</p>
+          <p id="rideAvgHr" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">Remaining work</p>
+          <p id="remainingWorkGuidance" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">Suggested watts now</p>
+          <p id="targetGuidanceWatts" class="avg-sub-value">--</p>
+        </article>
+      </section>
+
+      <div class="button-grid">
+        <button id="connectBtn" class="connect-btn" type="button">
+          Connect Assioma Pedals
+        </button>
+        <button id="connectHrBtn" class="connect-btn secondary" type="button">
+          Connect Heart Rate Monitor
+        </button>
+      </div>
+
+      <section class="ride-controls" aria-label="Ride programming and recording">
+        <label class="ride-label" for="targetKj">Ride target</label>
+        <div class="ride-programming-row">
+          <input
+            id="targetKj"
+            class="ride-input"
+            type="number"
+            min="1"
+            step="1"
+            value="500"
+            aria-label="Target kilojoules"
+          />
+          <span class="ride-input-unit">kJ</span>
+          <button id="startRideBtn" class="connect-btn success" type="button">
+            Start Ride Recording
+          </button>
+        </div>
+      </section>
+
+      <p id="status" class="status">Not connected</p>
+
+      <section class="ride-progress" aria-label="Ride completion progress">
+        <div class="ride-progress-details">
+          <span id="rideDone">Done: -- kJ</span>
+          <span id="rideRemaining">Remaining: -- kJ</span>
+          <span id="rideEta">ETA: --</span>
+        </div>
+        <div class="ride-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Ride completion percentage">
+          <div id="rideProgressFill" class="ride-progress-fill"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

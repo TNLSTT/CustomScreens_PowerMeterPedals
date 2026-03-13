@@ -1,24 +1,9 @@
 {
-  "name": "customscreens_powermeterpedals",
+  "name": "assioma-live-power",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "Minimal Web Bluetooth app for live cycling power from Favero Assioma pedals",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/TNLSTT/CustomScreens_PowerMeterPedals.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/TNLSTT/CustomScreens_PowerMeterPedals/issues"
-  },
-  "homepage": "https://github.com/TNLSTT/CustomScreens_PowerMeterPedals#readme",
-  "dependencies": {
-    "express": "^5.2.1"
+    "start": "node server.js"
   }
 }
