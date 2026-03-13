@@ -1,0 +1,9 @@
+{
+  "name": "assioma-live-power",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal Web Bluetooth app for live cycling power from Favero Assioma pedals",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
