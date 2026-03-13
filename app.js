@@ -25,6 +25,11 @@ const hrAvg3mEl = document.getElementById("hrAvg3m");
 const hrAvg5mEl = document.getElementById("hrAvg5m");
 const hrAvg10mEl = document.getElementById("hrAvg10m");
 const hrAvg20mEl = document.getElementById("hrAvg20m");
+const cadAvg1mEl = document.getElementById("cadAvg1m");
+const cadAvg3mEl = document.getElementById("cadAvg3m");
+const cadAvg5mEl = document.getElementById("cadAvg5m");
+const cadAvg10mEl = document.getElementById("cadAvg10m");
+const cadAvg20mEl = document.getElementById("cadAvg20m");
 const wpHr1mEl = document.getElementById("wpHr1m");
 const wpHr3mEl = document.getElementById("wpHr3m");
 const wpHr5mEl = document.getElementById("wpHr5m");
@@ -61,6 +66,8 @@ let powerCharacteristic;
 let heartRateCharacteristic;
 let latestPowerWatts = null;
 let latestHeartRateBpm = null;
+let latestCadenceRpm = null;
+let previousCrankData = null;
 let rideState = null;
 let lastPowerSampleTimestamp = null;
 let powerConnected = false;
@@ -278,9 +285,11 @@ function updateStartButtonVisibility() {
 
 function handlePowerNotification(event) {
   const value = event.target.value;
+  const flags = value.getUint16(0, true);
   const watts = value.getInt16(2, true);
 
   latestPowerWatts = watts;
+  latestCadenceRpm = parseCadenceFromPowerMeasurement(value, flags);
   wattsEl.textContent = watts;
 
   const now = Date.now();
@@ -290,6 +299,61 @@ function handlePowerNotification(event) {
   maybeAddRollingSample();
   updateRollingAverages();
   updateRideProgressUi();
+}
+
+
+function parseCadenceFromPowerMeasurement(value, flags) {
+  const CRANK_REV_PRESENT_FLAG = 0x20;
+  if ((flags & CRANK_REV_PRESENT_FLAG) === 0) {
+    previousCrankData = null;
+    return null;
+  }
+
+  const crankDataOffset = getCrankDataOffset(flags);
+  if (crankDataOffset == null || value.byteLength < crankDataOffset + 4) {
+    return null;
+  }
+
+  const cumulativeCrankRevs = value.getUint16(crankDataOffset, true);
+  const lastCrankEventTime = value.getUint16(crankDataOffset + 2, true);
+
+  if (!previousCrankData) {
+    previousCrankData = { cumulativeCrankRevs, lastCrankEventTime };
+    return null;
+  }
+
+  const deltaRevs = (cumulativeCrankRevs - previousCrankData.cumulativeCrankRevs + 65536) % 65536;
+  const deltaEventTime = (lastCrankEventTime - previousCrankData.lastCrankEventTime + 65536) % 65536;
+
+  previousCrankData = { cumulativeCrankRevs, lastCrankEventTime };
+
+  if (deltaRevs === 0 || deltaEventTime === 0) {
+    return null;
+  }
+
+  return (deltaRevs * 60 * 1024) / deltaEventTime;
+}
+
+function getCrankDataOffset(flags) {
+  const PEDAL_POWER_BALANCE_PRESENT_FLAG = 0x01;
+  const ACCUMULATED_TORQUE_PRESENT_FLAG = 0x04;
+  const WHEEL_REV_PRESENT_FLAG = 0x10;
+
+  let offset = 4;
+
+  if (flags & PEDAL_POWER_BALANCE_PRESENT_FLAG) {
+    offset += 1;
+  }
+
+  if (flags & ACCUMULATED_TORQUE_PRESENT_FLAG) {
+    offset += 2;
+  }
+
+  if (flags & WHEEL_REV_PRESENT_FLAG) {
+    offset += 6;
+  }
+
+  return offset;
 }
 
 function addPowerSample(watts, timestamp) {
@@ -349,6 +413,7 @@ function maybeAddRollingSample() {
   rollingSamples.push({
     watts: latestPowerWatts,
     heartRate: latestHeartRateBpm,
+    cadence: latestCadenceRpm,
     breathsPerMinute: estimateBreathsPerMinute(latestHeartRateBpm),
     timestamp: now,
   });
@@ -367,16 +432,16 @@ function updateRollingAverages() {
   const now = Date.now();
   pruneRollingSamples(now);
 
-  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, hrAvg1mEl, wpHr1mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, hrAvg3mEl, wpHr3mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, hrAvg5mEl, wpHr5mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, hrAvg10mEl, wpHr10mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, hrAvg20mEl, wpHr20mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, hrAvg1mEl, cadAvg1mEl, wpHr1mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, hrAvg3mEl, cadAvg3mEl, wpHr3mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, hrAvg5mEl, cadAvg5mEl, wpHr5mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, hrAvg10mEl, cadAvg10mEl, wpHr10mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, hrAvg20mEl, cadAvg20mEl, wpHr20mEl);
   updateBreathingMetrics();
   updateGuidancePanel();
 }
 
-function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, wpHrEl) {
+function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, cadenceAvgEl, wpHrEl) {
   const avgPower = getWindowAveragePower(now, windowMs);
   const startTime = now - windowMs;
   const samplesInWindow = rollingSamples.filter((sample) => sample.timestamp >= startTime);
@@ -384,6 +449,7 @@ function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, wpHrEl) {
   if (samplesInWindow.length === 0 || avgPower == null) {
     powerEl.textContent = "--";
     heartRateAvgEl.textContent = "--";
+    cadenceAvgEl.textContent = "--";
     wpHrEl.textContent = "--";
     return;
   }
@@ -394,9 +460,14 @@ function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, wpHrEl) {
   );
 
   const avgHeartRate = totalHeartRate / samplesInWindow.length;
+  const cadenceSamples = samplesInWindow.filter((sample) => Number.isFinite(sample.cadence));
+  const avgCadence = cadenceSamples.length > 0
+    ? cadenceSamples.reduce((sum, sample) => sum + sample.cadence, 0) / cadenceSamples.length
+    : null;
 
   powerEl.textContent = Math.round(avgPower);
   heartRateAvgEl.textContent = Math.round(avgHeartRate);
+  cadenceAvgEl.textContent = avgCadence == null ? "--" : Math.round(avgCadence);
 
   if (avgHeartRate <= 0) {
     wpHrEl.textContent = "--";
