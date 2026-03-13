@@ -2,6 +2,8 @@
 
 A minimal Web Bluetooth dashboard that connects to a cycling power meter (such as Favero Assioma pedals) and displays live watts.
 
+It also shows rolling average power for the last **3**, **5**, and **10** minutes.
+
 ## 1) Setup instructions
 
 1. Install [Node.js](https://nodejs.org/) (v16+ recommended).
