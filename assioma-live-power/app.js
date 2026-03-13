@@ -18,8 +18,16 @@ const hrAvg10mEl = document.getElementById("hrAvg10m");
 const wpHr3mEl = document.getElementById("wpHr3m");
 const wpHr5mEl = document.getElementById("wpHr5m");
 const wpHr10mEl = document.getElementById("wpHr10m");
+const targetKjEl = document.getElementById("targetKj");
+const startRideBtn = document.getElementById("startRideBtn");
+const rideDoneEl = document.getElementById("rideDone");
+const rideRemainingEl = document.getElementById("rideRemaining");
+const rideEtaEl = document.getElementById("rideEta");
+const rideProgressFillEl = document.getElementById("rideProgressFill");
+const rideProgressTrackEl = rideProgressFillEl?.parentElement;
 
 const rollingSamples = [];
+const powerSamples = [];
 const WINDOWS_IN_MS = {
   "3m": 3 * 60 * 1000,
   "5m": 5 * 60 * 1000,
@@ -30,9 +38,15 @@ let powerDevice;
 let heartRateDevice;
 let latestPowerWatts = null;
 let latestHeartRateBpm = null;
+let rideState = null;
+let lastPowerSampleTimestamp = null;
 
 connectBtn.addEventListener("click", connectPowerMeter);
 connectHrBtn.addEventListener("click", connectHeartRateMonitor);
+startRideBtn.addEventListener("click", startRideRecording);
+
+updateRideProgressUi();
+setInterval(updateRideProgressUi, 1000);
 
 async function connectPowerMeter() {
   if (!navigator.bluetooth) {
@@ -113,14 +127,141 @@ async function connectHeartRateMonitor() {
   }
 }
 
+
+function startRideRecording() {
+  const targetKj = Number(targetKjEl.value);
+
+  if (!Number.isFinite(targetKj) || targetKj <= 0) {
+    setStatus("Enter a valid ride target in kJ before starting.");
+    return;
+  }
+
+  rideState = {
+    targetKj,
+    startTimestamp: Date.now(),
+    doneKj: 0,
+    completed: false,
+  };
+  lastPowerSampleTimestamp = null;
+
+  setStatus(`Ride recording started for ${Math.round(targetKj)} kJ target.`);
+  updateRideProgressUi();
+}
+
+function calculateRideStats() {
+  if (!rideState) {
+    return null;
+  }
+
+  const doneKj = Math.min(rideState.doneKj, rideState.targetKj);
+  const remainingKj = Math.max(rideState.targetKj - doneKj, 0);
+  const avg3mWatts = getWindowAveragePower(Date.now(), WINDOWS_IN_MS["3m"]);
+  const etaSeconds = avg3mWatts > 0 ? Math.round((remainingKj * 1000) / avg3mWatts) : null;
+  const percentComplete = (doneKj / rideState.targetKj) * 100;
+
+  return { doneKj, remainingKj, etaSeconds, percentComplete };
+}
+
+function getWindowAveragePower(now, windowMs) {
+  const startTime = now - windowMs;
+  const samplesInWindow = powerSamples.filter((sample) => sample.timestamp >= startTime);
+
+  if (samplesInWindow.length === 0) {
+    return null;
+  }
+
+  const totalPower = samplesInWindow.reduce((sum, sample) => sum + sample.watts, 0);
+  return totalPower / samplesInWindow.length;
+}
+
+function formatDuration(seconds) {
+  if (seconds == null || !Number.isFinite(seconds)) {
+    return "--";
+  }
+
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const secs = safeSeconds % 60;
+
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+
+  return `${minutes}m ${String(secs).padStart(2, "0")}s`;
+}
+
+function updateRideProgressUi() {
+  if (!rideState) {
+    rideDoneEl.textContent = "Done: -- kJ";
+    rideRemainingEl.textContent = "Remaining: -- kJ";
+    rideEtaEl.textContent = "ETA: --";
+    rideProgressFillEl.style.width = "0%";
+    rideProgressTrackEl?.setAttribute("aria-valuenow", "0");
+    return;
+  }
+
+  const stats = calculateRideStats();
+  if (!stats) {
+    return;
+  }
+
+  const percent = Math.min(100, Math.max(0, stats.percentComplete));
+  rideDoneEl.textContent = `Done: ${stats.doneKj.toFixed(1)} kJ`;
+  rideRemainingEl.textContent = `Remaining: ${stats.remainingKj.toFixed(1)} kJ`;
+  rideEtaEl.textContent = stats.remainingKj <= 0 ? "ETA: Completed" : `ETA: ${formatDuration(stats.etaSeconds)}`;
+  rideProgressFillEl.style.width = `${percent.toFixed(1)}%`;
+  rideProgressTrackEl?.setAttribute("aria-valuenow", percent.toFixed(1));
+
+  if (stats.remainingKj <= 0 && !rideState.completed) {
+    rideState.completed = true;
+    setStatus(`Ride target complete: ${rideState.targetKj} kJ done.`);
+  }
+}
+
 function handlePowerNotification(event) {
   const value = event.target.value;
   const watts = value.getInt16(2, true);
 
   latestPowerWatts = watts;
   wattsEl.textContent = watts;
+
+  const now = Date.now();
+  addPowerSample(watts, now);
+  accumulateRideEnergy(watts, now);
+
   maybeAddRollingSample();
   updateRollingAverages();
+  updateRideProgressUi();
+}
+
+function addPowerSample(watts, timestamp) {
+  powerSamples.push({ watts, timestamp });
+  prunePowerSamples(timestamp);
+}
+
+function prunePowerSamples(now) {
+  const oldestAllowed = now - WINDOWS_IN_MS["10m"];
+  while (powerSamples.length > 0 && powerSamples[0].timestamp < oldestAllowed) {
+    powerSamples.shift();
+  }
+}
+
+function accumulateRideEnergy(watts, timestamp) {
+  if (!rideState) {
+    lastPowerSampleTimestamp = timestamp;
+    return;
+  }
+
+  if (lastPowerSampleTimestamp == null) {
+    lastPowerSampleTimestamp = timestamp;
+    return;
+  }
+
+  const elapsedSeconds = Math.max(0, (timestamp - lastPowerSampleTimestamp) / 1000);
+  const cappedElapsedSeconds = Math.min(elapsedSeconds, 5);
+  rideState.doneKj += (watts * cappedElapsedSeconds) / 1000;
+  lastPowerSampleTimestamp = timestamp;
 }
 
 function handleHeartRateNotification(event) {
@@ -133,6 +274,7 @@ function handleHeartRateNotification(event) {
   heartRateEl.textContent = heartRate;
   maybeAddRollingSample();
   updateRollingAverages();
+  updateRideProgressUi();
 }
 
 function maybeAddRollingSample() {
@@ -167,23 +309,22 @@ function updateRollingAverages() {
 }
 
 function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, wpHrEl) {
+  const avgPower = getWindowAveragePower(now, windowMs);
   const startTime = now - windowMs;
   const samplesInWindow = rollingSamples.filter((sample) => sample.timestamp >= startTime);
 
-  if (samplesInWindow.length === 0) {
+  if (samplesInWindow.length === 0 || avgPower == null) {
     powerEl.textContent = "--";
     heartRateAvgEl.textContent = "--";
     wpHrEl.textContent = "--";
     return;
   }
 
-  const totalPower = samplesInWindow.reduce((sum, sample) => sum + sample.watts, 0);
   const totalHeartRate = samplesInWindow.reduce(
     (sum, sample) => sum + sample.heartRate,
     0,
   );
 
-  const avgPower = totalPower / samplesInWindow.length;
   const avgHeartRate = totalHeartRate / samplesInWindow.length;
 
   powerEl.textContent = Math.round(avgPower);
