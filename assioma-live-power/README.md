@@ -4,6 +4,8 @@ A minimal Web Bluetooth dashboard that connects to a cycling power meter (such a
 
 It also shows rolling average power for the last **3**, **5**, and **10** minutes, plus rolling average heart rate and watts per heart rate over those same windows.
 
+It also includes ride programming by target kilojoules (kJ), a ride recording start control, and a bottom progress bar with kJ done, kJ remaining, and ETA based on the last 3-minute average power.
+
 ## 1) Setup instructions
 
 1. Install [Node.js](https://nodejs.org/) (v16+ recommended).
