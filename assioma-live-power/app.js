@@ -43,6 +43,13 @@ const rideRemainingEl = document.getElementById("rideRemaining");
 const rideEtaEl = document.getElementById("rideEta");
 const rideProgressFillEl = document.getElementById("rideProgressFill");
 const rideProgressTrackEl = rideProgressFillEl?.parentElement;
+const bucket0to100El = document.getElementById("bucket0to100");
+const bucket101to150El = document.getElementById("bucket101to150");
+const bucket151to200El = document.getElementById("bucket151to200");
+const bucket201to250El = document.getElementById("bucket201to250");
+const bucket251to300El = document.getElementById("bucket251to300");
+const bucket301to400El = document.getElementById("bucket301to400");
+const bucket400plusEl = document.getElementById("bucket400plus");
 
 const rollingSamples = [];
 const powerSamples = [];
@@ -182,12 +189,22 @@ function startRideRecording() {
     totalBreaths: 0,
     hrSum: 0,
     hrCount: 0,
+    kjBuckets: {
+      bucket0to100: 0,
+      bucket101to150: 0,
+      bucket151to200: 0,
+      bucket201to250: 0,
+      bucket251to300: 0,
+      bucket301to400: 0,
+      bucket400plus: 0,
+    },
   };
   lastPowerSampleTimestamp = null;
 
   setStatus(`Ride recording started for ${Math.round(targetKj)} kJ target.`);
   updateStartButtonVisibility();
   updateRideProgressUi();
+  updateBucketUi();
 }
 
 function calculateRideStats() {
@@ -243,6 +260,7 @@ function updateRideProgressUi() {
     updateBreathingMetrics();
     updateGuidancePanel();
     updateStartButtonVisibility();
+    updateBucketUi();
     return;
   }
 
@@ -261,6 +279,8 @@ function updateRideProgressUi() {
   updateGuidancePanel();
   updateStartButtonVisibility();
 
+  updateBucketUi();
+
   if (stats.remainingKj <= 0 && !rideState.completed) {
     rideState.completed = true;
     setStatus(`Ride target complete: ${rideState.targetKj} kJ done.`);
@@ -274,6 +294,27 @@ function updateStartButtonVisibility() {
 
   const isRecording = Boolean(rideState && !rideState.completed);
   startRideBtn.style.display = isRecording ? "none" : "inline-flex";
+}
+
+function updateBucketUi() {
+  if (!rideState || !rideState.kjBuckets) {
+    bucket0to100El.textContent = "--";
+    bucket101to150El.textContent = "--";
+    bucket151to200El.textContent = "--";
+    bucket201to250El.textContent = "--";
+    bucket251to300El.textContent = "--";
+    bucket301to400El.textContent = "--";
+    bucket400plusEl.textContent = "--";
+    return;
+  }
+
+  bucket0to100El.textContent = `${rideState.kjBuckets.bucket0to100.toFixed(1)} kJ`;
+  bucket101to150El.textContent = `${rideState.kjBuckets.bucket101to150.toFixed(1)} kJ`;
+  bucket151to200El.textContent = `${rideState.kjBuckets.bucket151to200.toFixed(1)} kJ`;
+  bucket201to250El.textContent = `${rideState.kjBuckets.bucket201to250.toFixed(1)} kJ`;
+  bucket251to300El.textContent = `${rideState.kjBuckets.bucket251to300.toFixed(1)} kJ`;
+  bucket301to400El.textContent = `${rideState.kjBuckets.bucket301to400.toFixed(1)} kJ`;
+  bucket400plusEl.textContent = `${rideState.kjBuckets.bucket400plus.toFixed(1)} kJ`;
 }
 
 function handlePowerNotification(event) {
@@ -317,8 +358,55 @@ function accumulateRideEnergy(watts, timestamp) {
 
   const elapsedSeconds = Math.max(0, (timestamp - lastPowerSampleTimestamp) / 1000);
   const cappedElapsedSeconds = Math.min(elapsedSeconds, 5);
-  rideState.doneKj += (watts * cappedElapsedSeconds) / 1000;
+  const sampleKj = (watts * cappedElapsedSeconds) / 1000;
+  rideState.doneKj += sampleKj;
+  accumulateBucketKj(watts, sampleKj);
   lastPowerSampleTimestamp = timestamp;
+}
+
+function accumulateBucketKj(watts, kj) {
+  if (!rideState || !rideState.kjBuckets || !Number.isFinite(kj) || kj <= 0) {
+    return;
+  }
+
+  const bucketKey = getBucketKeyForWatts(watts);
+  if (!bucketKey) {
+    return;
+  }
+
+  rideState.kjBuckets[bucketKey] += kj;
+}
+
+function getBucketKeyForWatts(watts) {
+  if (!Number.isFinite(watts)) {
+    return null;
+  }
+
+  if (watts <= 100) {
+    return "bucket0to100";
+  }
+
+  if (watts <= 150) {
+    return "bucket101to150";
+  }
+
+  if (watts <= 200) {
+    return "bucket151to200";
+  }
+
+  if (watts <= 250) {
+    return "bucket201to250";
+  }
+
+  if (watts <= 300) {
+    return "bucket251to300";
+  }
+
+  if (watts <= 400) {
+    return "bucket301to400";
+  }
+
+  return "bucket400plus";
 }
 
 function handleHeartRateNotification(event) {

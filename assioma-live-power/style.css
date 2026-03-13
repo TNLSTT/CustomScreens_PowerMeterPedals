@@ -109,6 +109,21 @@ body {
   line-height: 1.05;
 }
 
+.wattage-buckets {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: clamp(0.4rem, 1vw, 0.9rem);
+}
+
+.bucket-card {
+  text-align: center;
+}
+
+.bucket-card .avg-sub-value {
+  margin-top: 0.3rem;
+  font-size: clamp(0.9rem, 1.6vh, 1.2rem);
+}
+
 .button-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -250,6 +265,10 @@ body {
   .rolling-averages {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .wattage-buckets {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -264,7 +283,8 @@ body {
   }
 
   .rolling-averages,
-  .breath-guidance {
+  .breath-guidance,
+  .wattage-buckets {
     grid-template-columns: 1fr;
   }
 
