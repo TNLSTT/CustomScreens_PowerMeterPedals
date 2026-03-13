@@ -4,6 +4,16 @@ const CYCLING_POWER_MEASUREMENT_CHAR = 0x2a63;
 const connectBtn = document.getElementById("connectBtn");
 const wattsEl = document.getElementById("watts");
 const statusEl = document.getElementById("status");
+const avg3mEl = document.getElementById("avg3m");
+const avg5mEl = document.getElementById("avg5m");
+const avg10mEl = document.getElementById("avg10m");
+
+const rollingSamples = [];
+const WINDOWS_IN_MS = {
+  "3m": 3 * 60 * 1000,
+  "5m": 5 * 60 * 1000,
+  "10m": 10 * 60 * 1000,
+};
 
 let device;
 
@@ -57,6 +67,38 @@ function handlePowerNotification(event) {
   const watts = value.getInt16(2, true);
 
   wattsEl.textContent = watts;
+  addRollingSample(watts);
+  updateRollingAverages();
+}
+
+function addRollingSample(watts) {
+  const now = Date.now();
+  rollingSamples.push({ watts, timestamp: now });
+
+  const oldestAllowed = now - WINDOWS_IN_MS["10m"];
+  while (rollingSamples.length > 0 && rollingSamples[0].timestamp < oldestAllowed) {
+    rollingSamples.shift();
+  }
+}
+
+function updateRollingAverages() {
+  const now = Date.now();
+
+  avg3mEl.textContent = formatAverage(now, WINDOWS_IN_MS["3m"]);
+  avg5mEl.textContent = formatAverage(now, WINDOWS_IN_MS["5m"]);
+  avg10mEl.textContent = formatAverage(now, WINDOWS_IN_MS["10m"]);
+}
+
+function formatAverage(now, windowMs) {
+  const startTime = now - windowMs;
+  const samplesInWindow = rollingSamples.filter((sample) => sample.timestamp >= startTime);
+
+  if (samplesInWindow.length === 0) {
+    return "--";
+  }
+
+  const total = samplesInWindow.reduce((sum, sample) => sum + sample.watts, 0);
+  return Math.round(total / samplesInWindow.length);
 }
 
 function onDisconnected() {

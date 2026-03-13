@@ -12,6 +12,21 @@
       <div id="watts" class="watts" aria-live="polite">--</div>
       <p class="unit">watts</p>
 
+      <section class="rolling-averages" aria-label="Rolling average power">
+        <article class="avg-card">
+          <p class="avg-label">3 min avg</p>
+          <p id="avg3m" class="avg-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">5 min avg</p>
+          <p id="avg5m" class="avg-value">--</p>
+        </article>
+        <article class="avg-card">
+          <p class="avg-label">10 min avg</p>
+          <p id="avg10m" class="avg-value">--</p>
+        </article>
+      </section>
+
       <button id="connectBtn" class="connect-btn" type="button">
         Connect Assioma Pedals
       </button>
