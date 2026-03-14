@@ -57,6 +57,13 @@ const targetGuidanceLabelEl = document.getElementById("targetGuidanceLabel");
 const remainingWorkGuidanceEl = document.getElementById("remainingWorkGuidance");
 const targetGuidanceWattsEl = document.getElementById("targetGuidanceWatts");
 const targetKjEl = document.getElementById("targetKj");
+const powerBand0to100El = document.getElementById("powerBand0to100");
+const powerBand101to150El = document.getElementById("powerBand101to150");
+const powerBand151to200El = document.getElementById("powerBand151to200");
+const powerBand201to250El = document.getElementById("powerBand201to250");
+const powerBand251to300El = document.getElementById("powerBand251to300");
+const powerBand301to400El = document.getElementById("powerBand301to400");
+const powerBand401plusEl = document.getElementById("powerBand401plus");
 const startRideBtn = document.getElementById("startRideBtn");
 const rideDoneEl = document.getElementById("rideDone");
 const rideRemainingEl = document.getElementById("rideRemaining");
@@ -100,6 +107,15 @@ const PHASE_WINDOWS = {
 };
 const PHASE_MAX_WINDOW_MS = PHASE_WINDOWS["10m"];
 const INSTANT_PHASE_FEED_MAX_ROWS = 12;
+const POWER_BANDS = [
+  { key: "0to100", min: 0, max: 100 },
+  { key: "101to150", min: 101, max: 150 },
+  { key: "151to200", min: 151, max: 200 },
+  { key: "201to250", min: 201, max: 250 },
+  { key: "251to300", min: 251, max: 300 },
+  { key: "301to400", min: 301, max: 400 },
+  { key: "401plus", min: 401, max: Infinity },
+];
 
 let powerDevice;
 let heartRateDevice;
@@ -114,6 +130,7 @@ let lastPowerSampleTimestamp = null;
 let powerConnected = false;
 let heartRateConnected = false;
 let rideHeartRateSamples = [];
+let powerBandKjTotals = createEmptyPowerBandTotals();
 
 connectBtn.addEventListener("click", connectPowerMeter);
 connectHrBtn.addEventListener("click", connectHeartRateMonitor);
@@ -133,6 +150,7 @@ updateTargetGuidanceLabel();
 updateRideProgressUi();
 updatePowerPhaseExplorer();
 renderInstantPhaseFeed();
+updatePowerBandTotalsUi();
 initializeTextScaling();
 setInterval(updateRideProgressUi, 1000);
 
@@ -252,6 +270,8 @@ function startRideRecording() {
   };
   lastPowerSampleTimestamp = null;
   rideHeartRateSamples = [];
+  powerBandKjTotals = createEmptyPowerBandTotals();
+  updatePowerBandTotalsUi();
 
   setStatus(`Ride armed for ${formatNumber(targetKj, 2)} kJ. Starts after ${RIDE_START_REQUIRED_SECONDS}s above ${RIDE_START_MIN_WATTS} W.`);
   updateStartButtonVisibility();
@@ -582,7 +602,10 @@ function accumulateRideEnergy(watts, timestamp) {
 
   const elapsedSeconds = Math.max(0, (timestamp - lastPowerSampleTimestamp) / 1000);
   const cappedElapsedSeconds = Math.min(elapsedSeconds, 5);
-  rideState.doneKj += (watts * cappedElapsedSeconds) / 1000;
+  const deltaKj = (watts * cappedElapsedSeconds) / 1000;
+  rideState.doneKj += deltaKj;
+  addEnergyToPowerBand(watts, deltaKj);
+  updatePowerBandTotalsUi();
   lastPowerSampleTimestamp = timestamp;
 }
 
@@ -616,6 +639,47 @@ function maybeStartRideFromPower(watts, timestamp) {
     lastPowerSampleTimestamp = timestamp;
     setStatus(`Ride started: ${formatNumber(rideState.targetKj, 2)} kJ target.`);
   }
+}
+
+function createEmptyPowerBandTotals() {
+  return POWER_BANDS.reduce((totals, band) => {
+    totals[band.key] = 0;
+    return totals;
+  }, {});
+}
+
+function addEnergyToPowerBand(watts, deltaKj) {
+  if (!Number.isFinite(watts) || !Number.isFinite(deltaKj) || deltaKj <= 0) {
+    return;
+  }
+
+  const band = POWER_BANDS.find(({ min, max }) => watts >= min && watts <= max);
+  if (!band) {
+    return;
+  }
+
+  powerBandKjTotals[band.key] = (powerBandKjTotals[band.key] || 0) + deltaKj;
+}
+
+function updatePowerBandTotalsUi() {
+  const powerBandElementMap = {
+    "0to100": powerBand0to100El,
+    "101to150": powerBand101to150El,
+    "151to200": powerBand151to200El,
+    "201to250": powerBand201to250El,
+    "251to300": powerBand251to300El,
+    "301to400": powerBand301to400El,
+    "401plus": powerBand401plusEl,
+  };
+
+  Object.entries(powerBandElementMap).forEach(([key, element]) => {
+    if (!element) {
+      return;
+    }
+
+    const totalKj = powerBandKjTotals[key] || 0;
+    element.textContent = `${totalKj.toFixed(2)} kJ`;
+  });
 }
 
 function handleHeartRateNotification(event) {
