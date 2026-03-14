@@ -379,6 +379,54 @@ body {
   gap: clamp(0.45rem, 1vw, 0.95rem);
 }
 
+
+.instant-feed-card {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.instant-phase-feed {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 0.2rem;
+}
+
+.instant-feed-row {
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 0.55rem;
+  background: rgba(2, 6, 23, 0.5);
+  padding: 0.4rem 0.5rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.instant-feed-time {
+  font-size: 0.78rem;
+  color: #93c5fd;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.instant-feed-meta,
+.instant-feed-phases {
+  font-size: 0.82rem;
+  color: #e2e8f0;
+}
+
+.instant-feed-phases {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.instant-feed-empty {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.86rem;
+}
+
 .phase-window-card {
   display: grid;
   gap: 0.5rem;
@@ -476,7 +524,8 @@ body {
 
 @media (max-width: 900px) {
   .phase-sides-grid,
-  .phase-baseline-grid {
+  .phase-baseline-grid,
+  .instant-feed-phases {
     grid-template-columns: 1fr;
   }
 }
