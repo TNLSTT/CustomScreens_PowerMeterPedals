@@ -51,6 +51,7 @@ const breathsPerKjRideEl = document.getElementById("breathsPerKjRide");
 const rideAvgHrEl = document.getElementById("rideAvgHr");
 const rideHrAdherenceEl = document.getElementById("rideHrAdherence");
 const targetHrInputEl = document.getElementById("targetHrInput");
+const targetGuidanceLabelEl = document.getElementById("targetGuidanceLabel");
 const remainingWorkGuidanceEl = document.getElementById("remainingWorkGuidance");
 const targetGuidanceWattsEl = document.getElementById("targetGuidanceWatts");
 const targetKjEl = document.getElementById("targetKj");
@@ -84,16 +85,20 @@ let rideState = null;
 let lastPowerSampleTimestamp = null;
 let powerConnected = false;
 let heartRateConnected = false;
+let rideHeartRateSamples = [];
 
 connectBtn.addEventListener("click", connectPowerMeter);
 connectHrBtn.addEventListener("click", connectHeartRateMonitor);
 startRideBtn.addEventListener("click", startRideRecording);
 targetHrInputEl?.addEventListener("input", () => {
+  updateTargetGuidanceLabel();
+  recomputeRideHeartRateTotals();
   updateRollingAverages();
   updateGuidancePanel();
 });
 
 updateConnectionButtonLayout();
+updateTargetGuidanceLabel();
 updateRideProgressUi();
 setInterval(updateRideProgressUi, 1000);
 
@@ -208,6 +213,7 @@ function startRideRecording() {
     hrAbsErrorSum: 0,
   };
   lastPowerSampleTimestamp = null;
+  rideHeartRateSamples = [];
 
   setStatus(`Ride recording started for ${Math.round(targetKj)} kJ target.`);
   updateStartButtonVisibility();
@@ -415,6 +421,7 @@ function handleHeartRateNotification(event) {
     const targetHr = getTargetHeartRate();
     rideState.hrSum += heartRate;
     rideState.hrCount += 1;
+    rideHeartRateSamples.push(heartRate);
     if (targetHr != null) {
       rideState.hrAbsErrorSum += Math.abs(heartRate - targetHr);
     }
@@ -510,6 +517,46 @@ function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl,
 }
 
 
+function getTargetHeartRate() {
+  if (!targetHrInputEl) {
+    return TARGET_RIDE_AVG_HEART_RATE;
+  }
+
+  const target = Number(targetHrInputEl.value);
+  if (!Number.isFinite(target) || target <= 0) {
+    return null;
+  }
+
+  return target;
+}
+
+function updateTargetGuidanceLabel() {
+  if (!targetGuidanceLabelEl) {
+    return;
+  }
+
+  const targetHr = getTargetHeartRate();
+  const displayedTarget = targetHr == null ? TARGET_RIDE_AVG_HEART_RATE : Math.round(targetHr);
+  targetGuidanceLabelEl.textContent = `${displayedTarget} BPM Guidance`;
+}
+
+function recomputeRideHeartRateTotals() {
+  if (!rideState) {
+    return;
+  }
+
+  const targetHr = getTargetHeartRate();
+  if (targetHr == null || rideHeartRateSamples.length === 0) {
+    rideState.hrAbsErrorSum = 0;
+    return;
+  }
+
+  rideState.hrAbsErrorSum = rideHeartRateSamples.reduce(
+    (sum, heartRate) => sum + Math.abs(heartRate - targetHr),
+    0,
+  );
+}
+
 function calculatePowerVariability(now, windowMs, avgPower) {
   if (!Number.isFinite(avgPower) || avgPower <= 0) {
     return null;
@@ -537,19 +584,6 @@ function calculatePowerVariability(now, windowMs, avgPower) {
   ) / rollingTenSecondAverages.length;
 
   return (meanAbsoluteDeviation / avgPower) * 100;
-}
-
-function getTargetHeartRate() {
-  if (!targetHrInputEl) {
-    return TARGET_RIDE_AVG_HEART_RATE;
-  }
-
-  const target = Number(targetHrInputEl.value);
-  if (!Number.isFinite(target) || target <= 0) {
-    return null;
-  }
-
-  return target;
 }
 
 function calculateHeartRateAdherenceScore(samples, targetHeartRate) {
