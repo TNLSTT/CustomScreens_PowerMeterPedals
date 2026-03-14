@@ -439,23 +439,44 @@ function getCyclingPowerMeasurementEndOffset(flags) {
 }
 
 function parseAssiomaPowerPhaseExtension(value, offset) {
-  // Assioma can expose pedal-stroke fields via vendor extensions.
-  // We parse only if a plausible 8-angle block is present. Each angle is
-  // expected as hundredths of a degree in little-endian uint16 form.
-  if (value.byteLength < offset + 16) {
+  // Assioma can expose pedal-stroke fields via vendor extensions, but the
+  // extension can be shifted by 2-byte headers depending on firmware.
+  // Scan for a plausible 8-angle block instead of assuming it starts exactly
+  // at the end of the standard Cycling Power Measurement fields.
+  const minimumBlockBytes = 16;
+  if (value.byteLength < offset + minimumBlockBytes) {
     return null;
   }
 
-  const rawAngles = [];
-  for (let i = 0; i < 8; i += 1) {
-    rawAngles.push(value.getUint16(offset + (i * 2), true));
+  for (let candidateOffset = offset; candidateOffset <= value.byteLength - minimumBlockBytes; candidateOffset += 2) {
+    const rawAngles = [];
+    for (let i = 0; i < 8; i += 1) {
+      rawAngles.push(value.getUint16(candidateOffset + (i * 2), true));
+    }
+
+    const parsed = parsePowerPhaseAngleBlock(rawAngles);
+    if (parsed) {
+      return parsed;
+    }
   }
 
-  if (!rawAngles.every((raw) => raw <= 36000)) {
+  return null;
+}
+
+function parsePowerPhaseAngleBlock(rawAngles) {
+  const validRawAngles = rawAngles.filter(isFiniteRawPhaseAngle);
+  if (validRawAngles.length < 4) {
     return null;
   }
 
-  const [leftStart, leftEnd, rightStart, rightEnd, leftPeakStart, leftPeakEnd, rightPeakStart, rightPeakEnd] = rawAngles.map((raw) => normalizeAngle(raw / 100));
+  const maxAngle = Math.max(...validRawAngles);
+  const scale = maxAngle <= 3600 ? 10 : 100;
+  const parsedAngles = rawAngles.map((raw) => parseRawPhaseAngle(raw, scale));
+  const [leftStart, leftEnd, rightStart, rightEnd, leftPeakStart, leftPeakEnd, rightPeakStart, rightPeakEnd] = parsedAngles;
+
+  if (!isFiniteAngle(leftStart) || !isFiniteAngle(leftEnd) || !isFiniteAngle(rightStart) || !isFiniteAngle(rightEnd)) {
+    return null;
+  }
 
   return {
     left: {
@@ -471,6 +492,26 @@ function parseAssiomaPowerPhaseExtension(value, offset) {
       peakEnd: rightPeakEnd,
     },
   };
+}
+
+function isFiniteRawPhaseAngle(rawAngle) {
+  if (!Number.isFinite(rawAngle)) {
+    return false;
+  }
+
+  if (rawAngle === 0xFFFF || rawAngle === 0xFFFE) {
+    return false;
+  }
+
+  return rawAngle <= 36000;
+}
+
+function parseRawPhaseAngle(rawAngle, scale) {
+  if (!isFiniteRawPhaseAngle(rawAngle)) {
+    return null;
+  }
+
+  return normalizeAngle(rawAngle / scale);
 }
 
 function addPowerSample(watts, timestamp) {
