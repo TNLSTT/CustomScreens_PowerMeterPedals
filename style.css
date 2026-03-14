@@ -206,6 +206,16 @@ body {
   text-transform: uppercase;
 }
 
+.inline-control-row {
+  grid-template-columns: 90px auto;
+  width: fit-content;
+}
+
+.inline-control-row .ride-input {
+  font-size: clamp(0.95rem, 1.2vw, 1.1rem);
+  padding: 0.35rem 0.45rem;
+}
+
 .connect-btn.success {
   background: #34d399;
 }

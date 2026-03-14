@@ -20,11 +20,21 @@ const avg3mEl = document.getElementById("avg3m");
 const avg5mEl = document.getElementById("avg5m");
 const avg10mEl = document.getElementById("avg10m");
 const avg20mEl = document.getElementById("avg20m");
+const pv1mEl = document.getElementById("pv1m");
+const pv3mEl = document.getElementById("pv3m");
+const pv5mEl = document.getElementById("pv5m");
+const pv10mEl = document.getElementById("pv10m");
+const pv20mEl = document.getElementById("pv20m");
 const hrAvg1mEl = document.getElementById("hrAvg1m");
 const hrAvg3mEl = document.getElementById("hrAvg3m");
 const hrAvg5mEl = document.getElementById("hrAvg5m");
 const hrAvg10mEl = document.getElementById("hrAvg10m");
 const hrAvg20mEl = document.getElementById("hrAvg20m");
+const hrAdherence1mEl = document.getElementById("hrAdherence1m");
+const hrAdherence3mEl = document.getElementById("hrAdherence3m");
+const hrAdherence5mEl = document.getElementById("hrAdherence5m");
+const hrAdherence10mEl = document.getElementById("hrAdherence10m");
+const hrAdherence20mEl = document.getElementById("hrAdherence20m");
 const cadAvg1mEl = document.getElementById("cadAvg1m");
 const cadAvg3mEl = document.getElementById("cadAvg3m");
 const cadAvg5mEl = document.getElementById("cadAvg5m");
@@ -39,6 +49,8 @@ const breathsPerMinuteEl = document.getElementById("breathsPerMinute");
 const breathsPerKj3mEl = document.getElementById("breathsPerKj3m");
 const breathsPerKjRideEl = document.getElementById("breathsPerKjRide");
 const rideAvgHrEl = document.getElementById("rideAvgHr");
+const rideHrAdherenceEl = document.getElementById("rideHrAdherence");
+const targetHrInputEl = document.getElementById("targetHrInput");
 const remainingWorkGuidanceEl = document.getElementById("remainingWorkGuidance");
 const targetGuidanceWattsEl = document.getElementById("targetGuidanceWatts");
 const targetKjEl = document.getElementById("targetKj");
@@ -76,6 +88,10 @@ let heartRateConnected = false;
 connectBtn.addEventListener("click", connectPowerMeter);
 connectHrBtn.addEventListener("click", connectHeartRateMonitor);
 startRideBtn.addEventListener("click", startRideRecording);
+targetHrInputEl?.addEventListener("input", () => {
+  updateRollingAverages();
+  updateGuidancePanel();
+});
 
 updateConnectionButtonLayout();
 updateRideProgressUi();
@@ -189,6 +205,7 @@ function startRideRecording() {
     totalBreaths: 0,
     hrSum: 0,
     hrCount: 0,
+    hrAbsErrorSum: 0,
   };
   lastPowerSampleTimestamp = null;
 
@@ -395,8 +412,12 @@ function handleHeartRateNotification(event) {
   heartRateEl.textContent = heartRate;
 
   if (rideState) {
+    const targetHr = getTargetHeartRate();
     rideState.hrSum += heartRate;
     rideState.hrCount += 1;
+    if (targetHr != null) {
+      rideState.hrAbsErrorSum += Math.abs(heartRate - targetHr);
+    }
   }
 
   maybeAddRollingSample();
@@ -432,23 +453,25 @@ function updateRollingAverages() {
   const now = Date.now();
   pruneRollingSamples(now);
 
-  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, hrAvg1mEl, cadAvg1mEl, wpHr1mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, hrAvg3mEl, cadAvg3mEl, wpHr3mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, hrAvg5mEl, cadAvg5mEl, wpHr5mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, hrAvg10mEl, cadAvg10mEl, wpHr10mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, hrAvg20mEl, cadAvg20mEl, wpHr20mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, pv1mEl, hrAvg1mEl, hrAdherence1mEl, cadAvg1mEl, wpHr1mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, pv3mEl, hrAvg3mEl, hrAdherence3mEl, cadAvg3mEl, wpHr3mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, pv5mEl, hrAvg5mEl, hrAdherence5mEl, cadAvg5mEl, wpHr5mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, pv10mEl, hrAvg10mEl, hrAdherence10mEl, cadAvg10mEl, wpHr10mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, pv20mEl, hrAvg20mEl, hrAdherence20mEl, cadAvg20mEl, wpHr20mEl);
   updateBreathingMetrics();
   updateGuidancePanel();
 }
 
-function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, cadenceAvgEl, wpHrEl) {
+function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl, hrAdherenceEl, cadenceAvgEl, wpHrEl) {
   const avgPower = getWindowAveragePower(now, windowMs);
   const startTime = now - windowMs;
   const samplesInWindow = rollingSamples.filter((sample) => sample.timestamp >= startTime);
 
   if (samplesInWindow.length === 0 || avgPower == null) {
     powerEl.textContent = "--";
+    variabilityEl.textContent = "--";
     heartRateAvgEl.textContent = "--";
+    hrAdherenceEl.textContent = "--";
     cadenceAvgEl.textContent = "--";
     wpHrEl.textContent = "--";
     return;
@@ -466,6 +489,14 @@ function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, cadenceAvgEl, 
     : null;
 
   powerEl.textContent = Math.round(avgPower);
+
+  const powerVariability = calculatePowerVariability(now, windowMs, avgPower);
+  variabilityEl.textContent = powerVariability == null ? "--" : `${powerVariability.toFixed(1)}%`;
+
+  const targetHr = getTargetHeartRate();
+  const hrAdherenceScore = calculateHeartRateAdherenceScore(samplesInWindow, targetHr);
+  hrAdherenceEl.textContent = hrAdherenceScore == null ? "--" : `${hrAdherenceScore.toFixed(1)}%`;
+
   heartRateAvgEl.textContent = Math.round(avgHeartRate);
   cadenceAvgEl.textContent = avgCadence == null ? "--" : Math.round(avgCadence);
 
@@ -476,6 +507,63 @@ function setWindowMetrics(now, windowMs, powerEl, heartRateAvgEl, cadenceAvgEl, 
 
   const wattsPerHeartRate = avgPower / avgHeartRate;
   wpHrEl.textContent = wattsPerHeartRate.toFixed(2);
+}
+
+
+function calculatePowerVariability(now, windowMs, avgPower) {
+  if (!Number.isFinite(avgPower) || avgPower <= 0) {
+    return null;
+  }
+
+  const windowStart = now - windowMs;
+  const tenSecondWindowMs = 10 * 1000;
+  const inWindowPowerSamples = powerSamples.filter((sample) => sample.timestamp >= windowStart);
+
+  if (inWindowPowerSamples.length < 2) {
+    return null;
+  }
+
+  const rollingTenSecondAverages = inWindowPowerSamples
+    .map((sample) => getWindowAveragePower(sample.timestamp, tenSecondWindowMs))
+    .filter((value) => Number.isFinite(value));
+
+  if (rollingTenSecondAverages.length === 0) {
+    return null;
+  }
+
+  const meanAbsoluteDeviation = rollingTenSecondAverages.reduce(
+    (sum, rollingAvg) => sum + Math.abs(rollingAvg - avgPower),
+    0,
+  ) / rollingTenSecondAverages.length;
+
+  return (meanAbsoluteDeviation / avgPower) * 100;
+}
+
+function getTargetHeartRate() {
+  if (!targetHrInputEl) {
+    return TARGET_RIDE_AVG_HEART_RATE;
+  }
+
+  const target = Number(targetHrInputEl.value);
+  if (!Number.isFinite(target) || target <= 0) {
+    return null;
+  }
+
+  return target;
+}
+
+function calculateHeartRateAdherenceScore(samples, targetHeartRate) {
+  if (!Array.isArray(samples) || samples.length === 0 || !Number.isFinite(targetHeartRate) || targetHeartRate <= 0) {
+    return null;
+  }
+
+  const avgAbsoluteError = samples.reduce(
+    (sum, sample) => sum + Math.abs(sample.heartRate - targetHeartRate),
+    0,
+  ) / samples.length;
+
+  const normalizedError = avgAbsoluteError / targetHeartRate;
+  return Math.max(0, 100 * (1 - normalizedError));
 }
 
 function estimateBreathsPerMinute(heartRate) {
@@ -527,6 +615,7 @@ function getEstimatedBreathsFromSamples(samples) {
 
 function updateGuidancePanel() {
   if (!rideState) {
+    rideHrAdherenceEl.textContent = "--";
     rideAvgHrEl.textContent = "--";
     remainingWorkGuidanceEl.textContent = "--";
     targetGuidanceWattsEl.textContent = "--";
@@ -535,6 +624,12 @@ function updateGuidancePanel() {
 
   const rideAvgHr = rideState.hrCount > 0 ? rideState.hrSum / rideState.hrCount : null;
   const remainingKj = Math.max(rideState.targetKj - rideState.doneKj, 0);
+  const targetHr = getTargetHeartRate();
+
+  const rideAdherence = rideState.hrCount > 0 && targetHr != null
+    ? Math.max(0, 100 * (1 - (rideState.hrAbsErrorSum / rideState.hrCount) / targetHr))
+    : null;
+  rideHrAdherenceEl.textContent = rideAdherence == null ? "--" : `${rideAdherence.toFixed(1)}%`;
   rideAvgHrEl.textContent = rideAvgHr == null ? "--" : `${rideAvgHr.toFixed(1)} bpm`;
   remainingWorkGuidanceEl.textContent = `${remainingKj.toFixed(1)} kJ`;
 
@@ -555,7 +650,8 @@ function computeSuggestedWattsForTargetHr(rideAvgHr, remainingKj) {
     return null;
   }
 
-  const hrDrift = TARGET_RIDE_AVG_HEART_RATE - rideAvgHr;
+  const targetHr = getTargetHeartRate() ?? TARGET_RIDE_AVG_HEART_RATE;
+  const hrDrift = targetHr - rideAvgHr;
   const targetHrNow = avg5mHr + hrDrift;
   const wattsPerBpm = avg5mWatts / avg5mHr;
 
