@@ -11,6 +11,7 @@
       <nav class="top-nav" aria-label="View navigation">
         <button class="nav-tab active" data-view="dashboard" type="button">Main Dashboard</button>
         <button class="nav-tab" data-view="powerPhase" type="button">Power Phase Explorer</button>
+        <button class="nav-tab" data-view="settings" type="button">Settings</button>
       </nav>
 
       <section id="dashboardView" class="view-panel active" aria-label="Main dashboard">
@@ -182,6 +183,35 @@
         <section class="avg-card baseline-card" aria-label="1 minute versus 10 minute baseline">
           <p class="avg-label">1m vs 10m Baseline Delta</p>
           <div id="phaseBaselineGrid" class="phase-baseline-grid"></div>
+        </section>
+      </section>
+
+      <section id="settingsView" class="view-panel" aria-label="Display settings" hidden>
+        <section class="avg-card settings-card" aria-label="Text scaling">
+          <p class="avg-label">Text Scaling</p>
+          <p class="phase-description">Tune each text category independently for readability.</p>
+          <div class="settings-grid">
+            <label class="settings-row" for="scalePrimaryInput">
+              <span class="settings-label">Primary metrics</span>
+              <input id="scalePrimaryInput" class="settings-slider" type="range" min="70" max="170" step="5" value="100" />
+              <span id="scalePrimaryValue" class="settings-value">100%</span>
+            </label>
+            <label class="settings-row" for="scaleSecondaryInput">
+              <span class="settings-label">Secondary values</span>
+              <input id="scaleSecondaryInput" class="settings-slider" type="range" min="70" max="170" step="5" value="100" />
+              <span id="scaleSecondaryValue" class="settings-value">100%</span>
+            </label>
+            <label class="settings-row" for="scaleLabelInput">
+              <span class="settings-label">Labels &amp; units</span>
+              <input id="scaleLabelInput" class="settings-slider" type="range" min="70" max="170" step="5" value="100" />
+              <span id="scaleLabelValue" class="settings-value">100%</span>
+            </label>
+            <label class="settings-row" for="scaleUiInput">
+              <span class="settings-label">Controls &amp; navigation</span>
+              <input id="scaleUiInput" class="settings-slider" type="range" min="70" max="170" step="5" value="100" />
+              <span id="scaleUiValue" class="settings-value">100%</span>
+            </label>
+          </div>
         </section>
       </section>
     </main>

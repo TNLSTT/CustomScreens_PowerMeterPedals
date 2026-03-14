@@ -66,6 +66,15 @@ const dashboardViewEl = document.getElementById("dashboardView");
 const powerPhaseViewEl = document.getElementById("powerPhaseView");
 const phaseWindowGridEl = document.getElementById("phaseWindowGrid");
 const phaseBaselineGridEl = document.getElementById("phaseBaselineGrid");
+const settingsViewEl = document.getElementById("settingsView");
+const scalePrimaryInputEl = document.getElementById("scalePrimaryInput");
+const scaleSecondaryInputEl = document.getElementById("scaleSecondaryInput");
+const scaleLabelInputEl = document.getElementById("scaleLabelInput");
+const scaleUiInputEl = document.getElementById("scaleUiInput");
+const scalePrimaryValueEl = document.getElementById("scalePrimaryValue");
+const scaleSecondaryValueEl = document.getElementById("scaleSecondaryValue");
+const scaleLabelValueEl = document.getElementById("scaleLabelValue");
+const scaleUiValueEl = document.getElementById("scaleUiValue");
 
 const rollingSamples = [];
 const powerSamples = [];
@@ -117,6 +126,7 @@ updateConnectionButtonLayout();
 updateTargetGuidanceLabel();
 updateRideProgressUi();
 updatePowerPhaseExplorer();
+initializeTextScaling();
 setInterval(updateRideProgressUi, 1000);
 
 async function connectPowerMeter() {
@@ -912,21 +922,80 @@ setInterval(() => {
 
 
 function switchView(viewName) {
-  const isDashboard = viewName !== "powerPhase";
+  const activeView = ["dashboard", "powerPhase", "settings"].includes(viewName)
+    ? viewName
+    : "dashboard";
+
+  const isDashboard = activeView === "dashboard";
+  const isPowerPhase = activeView === "powerPhase";
+  const isSettings = activeView === "settings";
+
   dashboardViewEl?.classList.toggle("active", isDashboard);
-  powerPhaseViewEl?.classList.toggle("active", !isDashboard);
+  powerPhaseViewEl?.classList.toggle("active", isPowerPhase);
+  settingsViewEl?.classList.toggle("active", isSettings);
+
   if (dashboardViewEl) {
     dashboardViewEl.hidden = !isDashboard;
   }
   if (powerPhaseViewEl) {
-    powerPhaseViewEl.hidden = isDashboard;
+    powerPhaseViewEl.hidden = !isPowerPhase;
+  }
+  if (settingsViewEl) {
+    settingsViewEl.hidden = !isSettings;
   }
 
   navTabs.forEach((tab) => {
-    const isActive = tab.dataset.view === (isDashboard ? "dashboard" : "powerPhase");
+    const isActive = tab.dataset.view === activeView;
     tab.classList.toggle("active", isActive);
     tab.setAttribute("aria-current", isActive ? "page" : "false");
   });
+}
+
+function initializeTextScaling() {
+  const selectorsByCategory = {
+    primary: [".watts", ".heart-rate", ".avg-value"],
+    secondary: [".avg-sub-value", ".status", ".ride-progress-details span", ".phase-metric-grid dd"],
+    label: [".label", ".unit", ".avg-label", ".avg-sub-label", ".ride-label", ".phase-subtitle", ".phase-metric-grid dt", ".phase-description"],
+    ui: [".nav-tab", ".connect-btn", ".ride-input", ".ride-input-unit", ".settings-label", ".settings-value"],
+  };
+
+  const inputMap = {
+    primary: { input: scalePrimaryInputEl, value: scalePrimaryValueEl, varName: "--text-scale-primary" },
+    secondary: { input: scaleSecondaryInputEl, value: scaleSecondaryValueEl, varName: "--text-scale-secondary" },
+    label: { input: scaleLabelInputEl, value: scaleLabelValueEl, varName: "--text-scale-label" },
+    ui: { input: scaleUiInputEl, value: scaleUiValueEl, varName: "--text-scale-ui" },
+  };
+
+  Object.entries(selectorsByCategory).forEach(([category, selectors]) => {
+    const className = `text-scale-${category}`;
+    selectors.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((el) => el.classList.add(className));
+    });
+  });
+
+  Object.entries(inputMap).forEach(([category, config]) => {
+    if (!config.input || !config.value) {
+      return;
+    }
+
+    const storedRaw = localStorage.getItem(`textScale:${category}`);
+    const stored = Number(storedRaw);
+    const initialPercent = Number.isFinite(stored) ? Math.min(170, Math.max(70, stored)) : Number(config.input.value || 100);
+    config.input.value = String(initialPercent);
+    applyTextScale(config.varName, initialPercent, config.value);
+
+    config.input.addEventListener("input", () => {
+      const percent = Number(config.input.value);
+      applyTextScale(config.varName, percent, config.value);
+      localStorage.setItem(`textScale:${category}`, String(percent));
+    });
+  });
+}
+
+function applyTextScale(cssVarName, percent, valueEl) {
+  const scale = percent / 100;
+  document.documentElement.style.setProperty(cssVarName, String(scale));
+  valueEl.textContent = `${Math.round(percent)}%`;
 }
 
 function addPhaseSample(sample) {
