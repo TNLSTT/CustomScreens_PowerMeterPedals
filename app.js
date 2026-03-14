@@ -61,9 +61,16 @@ const rideRemainingEl = document.getElementById("rideRemaining");
 const rideEtaEl = document.getElementById("rideEta");
 const rideProgressFillEl = document.getElementById("rideProgressFill");
 const rideProgressTrackEl = rideProgressFillEl?.parentElement;
+const navTabs = Array.from(document.querySelectorAll(".nav-tab"));
+const dashboardViewEl = document.getElementById("dashboardView");
+const powerPhaseViewEl = document.getElementById("powerPhaseView");
+const phaseWindowGridEl = document.getElementById("phaseWindowGrid");
+const phaseBaselineGridEl = document.getElementById("phaseBaselineGrid");
 
 const rollingSamples = [];
 const powerSamples = [];
+const phaseSamples = [];
+const previousPhaseWindowState = {};
 const WINDOWS_IN_MS = {
   "1m": 1 * 60 * 1000,
   "3m": 3 * 60 * 1000,
@@ -72,6 +79,12 @@ const WINDOWS_IN_MS = {
   "20m": 20 * 60 * 1000,
 };
 const MAX_WINDOW_MS = WINDOWS_IN_MS["20m"];
+const PHASE_WINDOWS = {
+  "1m": 1 * 60 * 1000,
+  "5m": 5 * 60 * 1000,
+  "10m": 10 * 60 * 1000,
+};
+const PHASE_MAX_WINDOW_MS = PHASE_WINDOWS["10m"];
 
 let powerDevice;
 let heartRateDevice;
@@ -97,9 +110,13 @@ targetHrInputEl?.addEventListener("input", () => {
   updateGuidancePanel();
 });
 
+navTabs.forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
+switchView("dashboard");
+
 updateConnectionButtonLayout();
 updateTargetGuidanceLabel();
 updateRideProgressUi();
+updatePowerPhaseExplorer();
 setInterval(updateRideProgressUi, 1000);
 
 async function connectPowerMeter() {
@@ -312,11 +329,19 @@ function handlePowerNotification(event) {
   const watts = value.getInt16(2, true);
 
   latestPowerWatts = watts;
-  latestCadenceRpm = parseCadenceFromPowerMeasurement(value, flags);
+  const parsedPowerMeasurement = parsePowerMeasurementDetails(value, flags);
+  latestCadenceRpm = parsedPowerMeasurement.cadence;
   wattsEl.textContent = watts;
 
   const now = Date.now();
   addPowerSample(watts, now);
+  addPhaseSample({
+    timestamp: now,
+    watts,
+    cadence: latestCadenceRpm,
+    heartRate: latestHeartRateBpm,
+    powerPhase: parsedPowerMeasurement.powerPhase,
+  });
   accumulateRideEnergy(watts, now);
 
   maybeAddRollingSample();
@@ -325,14 +350,24 @@ function handlePowerNotification(event) {
 }
 
 
-function parseCadenceFromPowerMeasurement(value, flags) {
+function parsePowerMeasurementDetails(value, flags) {
+  const crankDataOffset = getCrankDataOffset(flags);
+  const cadence = parseCadenceFromPowerMeasurement(value, flags, crankDataOffset);
+  const offsetAfterStandardFields = getCyclingPowerMeasurementEndOffset(flags);
+
+  return {
+    cadence,
+    powerPhase: parseAssiomaPowerPhaseExtension(value, offsetAfterStandardFields),
+  };
+}
+
+function parseCadenceFromPowerMeasurement(value, flags, crankDataOffset = getCrankDataOffset(flags)) {
   const CRANK_REV_PRESENT_FLAG = 0x20;
   if ((flags & CRANK_REV_PRESENT_FLAG) === 0) {
     previousCrankData = null;
     return null;
   }
 
-  const crankDataOffset = getCrankDataOffset(flags);
   if (crankDataOffset == null || value.byteLength < crankDataOffset + 4) {
     return null;
   }
@@ -377,6 +412,65 @@ function getCrankDataOffset(flags) {
   }
 
   return offset;
+}
+
+function getCyclingPowerMeasurementEndOffset(flags) {
+  let offset = 4;
+
+  const fieldSizes = [
+    [0x01, 1],
+    [0x04, 2],
+    [0x10, 6],
+    [0x20, 4],
+    [0x40, 4],
+    [0x80, 4],
+    [0x100, 2],
+    [0x200, 2],
+    [0x400, 2],
+  ];
+
+  fieldSizes.forEach(([flag, size]) => {
+    if (flags & flag) {
+      offset += size;
+    }
+  });
+
+  return offset;
+}
+
+function parseAssiomaPowerPhaseExtension(value, offset) {
+  // Assioma can expose pedal-stroke fields via vendor extensions.
+  // We parse only if a plausible 8-angle block is present. Each angle is
+  // expected as hundredths of a degree in little-endian uint16 form.
+  if (value.byteLength < offset + 16) {
+    return null;
+  }
+
+  const rawAngles = [];
+  for (let i = 0; i < 8; i += 1) {
+    rawAngles.push(value.getUint16(offset + (i * 2), true));
+  }
+
+  if (!rawAngles.every((raw) => raw <= 36000)) {
+    return null;
+  }
+
+  const [leftStart, leftEnd, rightStart, rightEnd, leftPeakStart, leftPeakEnd, rightPeakStart, rightPeakEnd] = rawAngles.map((raw) => normalizeAngle(raw / 100));
+
+  return {
+    left: {
+      start: leftStart,
+      end: leftEnd,
+      peakStart: leftPeakStart,
+      peakEnd: leftPeakEnd,
+    },
+    right: {
+      start: rightStart,
+      end: rightEnd,
+      peakStart: rightPeakStart,
+      peakEnd: rightPeakEnd,
+    },
+  };
 }
 
 function addPowerSample(watts, timestamp) {
@@ -467,6 +561,7 @@ function updateRollingAverages() {
   setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, pv20mEl, hrAvg20mEl, hrAdherence20mEl, cadAvg20mEl, wpHr20mEl);
   updateBreathingMetrics();
   updateGuidancePanel();
+  updatePowerPhaseExplorer();
 }
 
 function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl, hrAdherenceEl, cadenceAvgEl, wpHrEl) {
@@ -773,6 +868,372 @@ setInterval(() => {
 
   rideState.totalBreaths += breathsPerMinute / 60;
 }, 1000);
+
+
+function switchView(viewName) {
+  const isDashboard = viewName !== "powerPhase";
+  dashboardViewEl?.classList.toggle("active", isDashboard);
+  powerPhaseViewEl?.classList.toggle("active", !isDashboard);
+  if (dashboardViewEl) {
+    dashboardViewEl.hidden = !isDashboard;
+  }
+  if (powerPhaseViewEl) {
+    powerPhaseViewEl.hidden = isDashboard;
+  }
+
+  navTabs.forEach((tab) => {
+    const isActive = tab.dataset.view === (isDashboard ? "dashboard" : "powerPhase");
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-current", isActive ? "page" : "false");
+  });
+}
+
+function addPhaseSample(sample) {
+  phaseSamples.push(sample);
+  prunePhaseSamples(sample.timestamp);
+}
+
+function prunePhaseSamples(now) {
+  const oldestAllowed = now - PHASE_MAX_WINDOW_MS;
+  while (phaseSamples.length > 0 && phaseSamples[0].timestamp < oldestAllowed) {
+    phaseSamples.shift();
+  }
+}
+
+function updatePowerPhaseExplorer() {
+  if (!phaseWindowGridEl || !phaseBaselineGridEl) {
+    return;
+  }
+
+  const now = Date.now();
+  prunePhaseSamples(now);
+
+  const aggregates = {};
+  phaseWindowGridEl.innerHTML = Object.entries(PHASE_WINDOWS)
+    .map(([windowKey, windowMs]) => {
+      const summary = summarizePhaseWindow(now, windowMs);
+      aggregates[windowKey] = summary;
+      return renderPhaseWindowCard(windowKey, summary);
+    })
+    .join("");
+
+  phaseBaselineGridEl.innerHTML = renderBaselineComparison(aggregates["1m"], aggregates["10m"]);
+}
+
+function summarizePhaseWindow(now, windowMs) {
+  const startTime = now - windowMs;
+  const samples = phaseSamples.filter((sample) => sample.timestamp >= startTime);
+  const withPhase = samples.filter((sample) => sample.powerPhase?.left || sample.powerPhase?.right);
+
+  return {
+    left: summarizePhaseSide(withPhase, "left", windowMs),
+    right: summarizePhaseSide(withPhase, "right", windowMs),
+    avgCadence: getAverageFromSamples(samples, (sample) => sample.cadence),
+    avgPower: getAverageFromSamples(samples, (sample) => sample.watts),
+    avgHeartRate: getAverageFromSamples(samples, (sample) => sample.heartRate),
+  };
+}
+
+function summarizePhaseSide(samples, side, windowMs) {
+  const starts = [];
+  const ends = [];
+  const peakStarts = [];
+  const peakEnds = [];
+  const widths = [];
+  const centers = [];
+  const peakWidths = [];
+  const peakCenters = [];
+
+  samples.forEach((sample) => {
+    const phase = sample.powerPhase?.[side];
+    if (!phase) {
+      return;
+    }
+
+    if (isFiniteAngle(phase.start)) starts.push(phase.start);
+    if (isFiniteAngle(phase.end)) ends.push(phase.end);
+    if (isFiniteAngle(phase.peakStart)) peakStarts.push(phase.peakStart);
+    if (isFiniteAngle(phase.peakEnd)) peakEnds.push(phase.peakEnd);
+
+    const width = angularWidth(phase.start, phase.end);
+    if (width != null) {
+      widths.push(width);
+      centers.push(angularCenter(phase.start, phase.end));
+    }
+
+    const peakWidth = angularWidth(phase.peakStart, phase.peakEnd);
+    if (peakWidth != null) {
+      peakWidths.push(peakWidth);
+      peakCenters.push(angularCenter(phase.peakStart, phase.peakEnd));
+    }
+  });
+
+  const stateKey = `${windowMs}-${side}`;
+  const previous = previousPhaseWindowState[stateKey] || {};
+  const summary = {
+    start: circularMean(starts),
+    end: circularMean(ends),
+    width: arithmeticMean(widths),
+    center: circularMean(centers),
+    peakStart: circularMean(peakStarts),
+    peakEnd: circularMean(peakEnds),
+    peakWidth: arithmeticMean(peakWidths),
+    peakCenter: circularMean(peakCenters),
+    stability: classifyVariability(circularDispersion(centers), standardDeviation(widths)),
+    trendCenter: trendForValue(previous.center, circularMean(centers), true),
+    trendWidth: trendForValue(previous.width, arithmeticMean(widths), false),
+    trendPeakCenter: trendForValue(previous.peakCenter, circularMean(peakCenters), true),
+    trendPeakWidth: trendForValue(previous.peakWidth, arithmeticMean(peakWidths), false),
+  };
+
+  previousPhaseWindowState[stateKey] = {
+    center: summary.center,
+    width: summary.width,
+    peakCenter: summary.peakCenter,
+    peakWidth: summary.peakWidth,
+  };
+
+  return summary;
+}
+
+function renderPhaseWindowCard(windowKey, summary) {
+  const hr = summary.avgHeartRate;
+  const wpHr = Number.isFinite(summary.avgPower) && Number.isFinite(hr) && hr > 0 ? (summary.avgPower / hr) : null;
+
+  return `
+    <article class="avg-card phase-window-card">
+      <p class="avg-label">${windowKey.toUpperCase()} Window</p>
+      <div class="phase-sides-grid">
+        ${renderSideCard("Left pedal", summary.left)}
+        ${renderSideCard("Right pedal", summary.right)}
+      </div>
+      <dl class="phase-comparison-grid">
+        <dt>L-R center diff</dt><dd>${formatAngleDiff(summary.left.center, summary.right.center)}</dd>
+        <dt>L-R width diff</dt><dd>${formatDiff(summary.left.width, summary.right.width, "°")}</dd>
+        <dt>L-R peak center diff</dt><dd>${formatAngleDiff(summary.left.peakCenter, summary.right.peakCenter)}</dd>
+        <dt>L-R peak width diff</dt><dd>${formatDiff(summary.left.peakWidth, summary.right.peakWidth, "°")}</dd>
+        <dt>Avg cadence</dt><dd>${formatNumber(summary.avgCadence, 0, "rpm")}</dd>
+        <dt>Avg power</dt><dd>${formatNumber(summary.avgPower, 0, "W")}</dd>
+        <dt>Avg heart rate</dt><dd>${formatNumber(summary.avgHeartRate, 0, "bpm")}</dd>
+        <dt>Watts / BPM</dt><dd>${formatNumber(wpHr, 2, "")}</dd>
+      </dl>
+    </article>
+  `;
+}
+
+function renderSideCard(title, sideSummary) {
+  return `
+    <section class="phase-side-card">
+      <p class="phase-subtitle">${title}</p>
+      <dl class="phase-metric-grid">
+        <dt>Power start</dt><dd>${formatAngle(sideSummary.start)}</dd>
+        <dt>Power end</dt><dd>${formatAngle(sideSummary.end)}</dd>
+        <dt>Power width</dt><dd>${formatAngle(sideSummary.width)}${trendChip(sideSummary.trendWidth)}</dd>
+        <dt>Power center</dt><dd>${formatAngle(sideSummary.center)}${trendChip(sideSummary.trendCenter)}</dd>
+        <dt>Peak start</dt><dd>${formatAngle(sideSummary.peakStart)}</dd>
+        <dt>Peak end</dt><dd>${formatAngle(sideSummary.peakEnd)}</dd>
+        <dt>Peak width</dt><dd>${formatAngle(sideSummary.peakWidth)}${trendChip(sideSummary.trendPeakWidth)}</dd>
+        <dt>Peak center</dt><dd>${formatAngle(sideSummary.peakCenter)}${trendChip(sideSummary.trendPeakCenter)}</dd>
+        <dt>Stability</dt><dd class="stability-${sideSummary.stability.toLowerCase()}">${sideSummary.stability}</dd>
+      </dl>
+    </section>
+  `;
+}
+
+function renderBaselineComparison(summary1m, summary10m) {
+  const one = summary1m || {};
+  const ten = summary10m || {};
+  const wpHrOne = Number.isFinite(one.avgPower) && Number.isFinite(one.avgHeartRate) && one.avgHeartRate > 0 ? one.avgPower / one.avgHeartRate : null;
+  const wpHrTen = Number.isFinite(ten.avgPower) && Number.isFinite(ten.avgHeartRate) && ten.avgHeartRate > 0 ? ten.avgPower / ten.avgHeartRate : null;
+
+  const rows = [
+    ["Phase center", formatDiff(one.left?.center, ten.left?.center, "°", true)],
+    ["Phase width", formatDiff(one.left?.width, ten.left?.width, "°")],
+    ["Cadence", formatDiff(one.avgCadence, ten.avgCadence, "rpm")],
+    ["Watts / BPM", formatDiff(wpHrOne, wpHrTen, "", false, 2)],
+  ];
+
+  return rows
+    .map(([label, value]) => `<article class="baseline-item"><p class="avg-sub-label">${label}</p><p class="avg-sub-value">${value}</p></article>`)
+    .join("");
+}
+
+function angularWidth(startAngle, endAngle) {
+  if (!isFiniteAngle(startAngle) || !isFiniteAngle(endAngle)) {
+    return null;
+  }
+
+  return (normalizeAngle(endAngle) - normalizeAngle(startAngle) + 360) % 360;
+}
+
+function angularCenter(startAngle, endAngle) {
+  const width = angularWidth(startAngle, endAngle);
+  if (width == null) {
+    return null;
+  }
+
+  return normalizeAngle(startAngle + (width / 2));
+}
+
+function normalizeAngle(angle) {
+  if (!Number.isFinite(angle)) {
+    return null;
+  }
+
+  return ((angle % 360) + 360) % 360;
+}
+
+function circularMean(values) {
+  const filtered = values.filter(isFiniteAngle);
+  if (filtered.length === 0) {
+    return null;
+  }
+
+  const radians = filtered.map((value) => (value * Math.PI) / 180);
+  const sinSum = radians.reduce((sum, value) => sum + Math.sin(value), 0);
+  const cosSum = radians.reduce((sum, value) => sum + Math.cos(value), 0);
+
+  if (sinSum === 0 && cosSum === 0) {
+    return null;
+  }
+
+  const angle = Math.atan2(sinSum, cosSum) * (180 / Math.PI);
+  return normalizeAngle(angle);
+}
+
+function circularDispersion(values) {
+  const filtered = values.filter(isFiniteAngle);
+  if (filtered.length < 2) {
+    return null;
+  }
+
+  const mean = circularMean(filtered);
+  if (!isFiniteAngle(mean)) {
+    return null;
+  }
+
+  const squaredDiffs = filtered.map((value) => {
+    const diff = angularDifference(value, mean);
+    return diff * diff;
+  });
+
+  return Math.sqrt(squaredDiffs.reduce((sum, value) => sum + value, 0) / squaredDiffs.length);
+}
+
+function angularDifference(a, b) {
+  if (!isFiniteAngle(a) || !isFiniteAngle(b)) {
+    return null;
+  }
+
+  const delta = normalizeAngle(a) - normalizeAngle(b);
+  return ((delta + 540) % 360) - 180;
+}
+
+function arithmeticMean(values) {
+  const filtered = values.filter((value) => Number.isFinite(value));
+  if (filtered.length === 0) {
+    return null;
+  }
+
+  return filtered.reduce((sum, value) => sum + value, 0) / filtered.length;
+}
+
+function standardDeviation(values) {
+  const filtered = values.filter((value) => Number.isFinite(value));
+  if (filtered.length < 2) {
+    return null;
+  }
+
+  const avg = arithmeticMean(filtered);
+  const variance = filtered.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / filtered.length;
+  return Math.sqrt(variance);
+}
+
+function classifyVariability(centerDispersion, widthDeviation) {
+  const scores = [centerDispersion, widthDeviation].filter((value) => Number.isFinite(value));
+  if (scores.length === 0) {
+    return "Medium";
+  }
+
+  const score = arithmeticMean(scores);
+  if (score < 6) {
+    return "Low";
+  }
+  if (score > 15) {
+    return "High";
+  }
+
+  return "Medium";
+}
+
+function trendForValue(previous, current, isCircular) {
+  if (!Number.isFinite(previous) || !Number.isFinite(current)) {
+    return "stable";
+  }
+
+  const delta = isCircular ? angularDifference(current, previous) : current - previous;
+  if (!Number.isFinite(delta)) {
+    return "stable";
+  }
+
+  if (delta > 1.5) {
+    return "rising";
+  }
+  if (delta < -1.5) {
+    return "falling";
+  }
+
+  return "stable";
+}
+
+function trendChip(trend) {
+  const map = {
+    rising: "↑",
+    falling: "↓",
+    stable: "→",
+  };
+  return `<span class="trend-chip">${map[trend] || map.stable}</span>`;
+}
+
+function formatAngle(value) {
+  return Number.isFinite(value) ? `${Math.round(value)}°` : "--";
+}
+
+function formatNumber(value, digits = 0, suffix = "") {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+
+  const rounded = digits === 0 ? Math.round(value) : value.toFixed(digits);
+  return suffix ? `${rounded} ${suffix}` : `${rounded}`;
+}
+
+function formatDiff(leftValue, rightValue, suffix = "", circular = false, digits = 1) {
+  if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) {
+    return "--";
+  }
+
+  const diff = circular ? angularDifference(leftValue, rightValue) : leftValue - rightValue;
+  if (!Number.isFinite(diff)) {
+    return "--";
+  }
+
+  const rounded = digits === 0 ? Math.round(diff) : diff.toFixed(digits);
+  return suffix ? `${rounded} ${suffix}` : `${rounded}`;
+}
+
+function formatAngleDiff(leftValue, rightValue) {
+  return formatDiff(leftValue, rightValue, "°", true, 1);
+}
+
+function getAverageFromSamples(samples, getter) {
+  const values = samples.map(getter).filter((value) => Number.isFinite(value));
+  return arithmeticMean(values);
+}
+
+function isFiniteAngle(value) {
+  return Number.isFinite(value);
+}
 
 function setStatus(message) {
   statusEl.textContent = message;
