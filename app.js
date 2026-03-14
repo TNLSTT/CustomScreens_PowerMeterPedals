@@ -91,6 +91,8 @@ const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
 const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
 
 const WIDGET_LAYOUT_STORAGE_KEY = "widgetLayout:v1";
+const POPUP_GRAPH_MIN_DURATION_SECONDS = 300;
+const POPUP_GRAPH_MAX_WATTS = 500;
 const WIDGET_TRANSFORM_LIMITS = {
   minScale: 0.6,
   maxScale: 2.2,
@@ -1079,7 +1081,9 @@ function openPopupGraphWindow() {
     return;
   }
 
-  popupGraphWindow = window.open("", "powerPopupGraph", "width=620,height=420");
+  const popupWidth = Math.max(900, Math.floor(window.screen.availWidth));
+  const popupHeight = Math.max(420, Math.floor(window.screen.availHeight * 0.7));
+  popupGraphWindow = window.open("", "powerPopupGraph", `width=${popupWidth},height=${popupHeight},left=0,top=0`);
   if (!popupGraphWindow) {
     setStatus("Popup blocked. Allow popups to open the graph window.");
     return;
@@ -1131,7 +1135,11 @@ function openPopupGraphWindow() {
     popupGraphCanvas = null;
     popupGraphContext = null;
   });
+  popupGraphWindow.addEventListener("resize", () => {
+    drawPopupGraph();
+  });
 
+  resizePopupGraphCanvas();
   drawPopupGraph();
 }
 
@@ -1166,7 +1174,7 @@ function updatePopupGraph() {
     ? elapsedSeconds + Math.max(0, stats.etaSeconds)
     : Math.max(elapsedSeconds, popupGraphPoints.length > 0 ? popupGraphPoints[popupGraphPoints.length - 1].t : 0);
 
-  const maxDurationSeconds = Math.max(60, estimatedDuration);
+  const maxDurationSeconds = Math.max(POPUP_GRAPH_MIN_DURATION_SECONDS, estimatedDuration);
 
   while (popupGraphPoints.length > 0 && popupGraphPoints[0].t < elapsedSeconds - maxDurationSeconds) {
     popupGraphPoints.shift();
@@ -1175,10 +1183,25 @@ function updatePopupGraph() {
   drawPopupGraph(maxDurationSeconds);
 }
 
-function drawPopupGraph(maxDurationSeconds = 60) {
+function resizePopupGraphCanvas() {
+  if (!popupGraphCanvas || !popupGraphWindow || popupGraphWindow.closed) {
+    return;
+  }
+
+  const wrapEl = popupGraphCanvas.parentElement;
+  const targetWidth = Math.max(580, Math.floor((wrapEl?.clientWidth || 580) - 2));
+  const targetHeight = Math.max(300, Math.floor((popupGraphWindow.innerHeight || 420) - 120));
+
+  popupGraphCanvas.width = targetWidth;
+  popupGraphCanvas.height = targetHeight;
+}
+
+function drawPopupGraph(maxDurationSeconds = POPUP_GRAPH_MIN_DURATION_SECONDS) {
   if (!popupGraphCanvas || !popupGraphContext) {
     return;
   }
+
+  resizePopupGraphCanvas();
 
   const ctx = popupGraphContext;
   const width = popupGraphCanvas.width;
@@ -1197,8 +1220,8 @@ function drawPopupGraph(maxDurationSeconds = 60) {
   ctx.lineTo(width - padding.right, height - padding.bottom);
   ctx.stroke();
 
-  const maxWatts = Math.max(200, ...popupGraphPoints.map((point) => point.watts));
-  const yTickStep = Math.max(50, Math.round(maxWatts / 4 / 10) * 10);
+  const maxWatts = POPUP_GRAPH_MAX_WATTS;
+  const yTickStep = 100;
 
   ctx.fillStyle = "#94a3b8";
   ctx.font = "12px sans-serif";
@@ -1229,7 +1252,7 @@ function drawPopupGraph(maxDurationSeconds = 60) {
 
   popupGraphPoints.forEach((point, index) => {
     const x = padding.left + (Math.min(point.t, maxDurationSeconds) / maxDurationSeconds) * innerWidth;
-    const clampedWatts = Math.max(0, Math.min(point.watts, maxWatts));
+    const clampedWatts = Math.max(0, Math.min(point.watts, POPUP_GRAPH_MAX_WATTS));
     const y = height - padding.bottom - (clampedWatts / maxWatts) * innerHeight;
 
     if (index === 0) {
