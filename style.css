@@ -20,7 +20,7 @@ body {
   width: 100vw;
   height: 100vh;
   display: grid;
-  grid-template-rows: repeat(2, auto) auto auto auto auto auto auto;
+  grid-template-rows: auto auto auto auto auto auto;
   align-content: start;
   gap: clamp(0.35rem, 0.8vh, 0.75rem);
   padding: clamp(0.65rem, 1.7vh, 1.25rem) clamp(0.8rem, 2.1vw, 1.5rem);
@@ -30,6 +30,19 @@ body {
 
 .metric-block {
   margin: 0;
+}
+
+.top-band {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: clamp(0.45rem, 1.1vw, 1rem);
+  align-items: start;
+}
+
+.live-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.45rem, 1.1vw, 1rem);
 }
 
 .label {
@@ -68,6 +81,10 @@ body {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: clamp(0.45rem, 1.1vw, 1rem);
+}
+
+.breath-guidance-top {
+  margin: 0;
 }
 
 .avg-card {
@@ -256,6 +273,12 @@ body {
   transition: width 0.4s ease;
 }
 
+@media (max-width: 1500px) {
+  .top-band {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1200px) {
   .rolling-averages {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -273,6 +296,7 @@ body {
     overflow: visible;
   }
 
+  .live-metrics,
   .rolling-averages,
   .breath-guidance {
     grid-template-columns: 1fr;
