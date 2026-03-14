@@ -1377,7 +1377,7 @@ function initializeTextScaling() {
 function applyTextScale(cssVarName, percent, valueEl) {
   const scale = percent / 100;
   document.documentElement.style.setProperty(cssVarName, String(scale));
-  valueEl.textContent = `${Math.round(percent)}%`;
+  valueEl.textContent = `${formatNumber(percent, 2)}%`;
 }
 
 function initializeWidgetLayoutSystem() {
@@ -2033,18 +2033,15 @@ function formatAngle(value) {
   return Number.isFinite(value) ? `${formatNumber(value, 2)}°` : "--";
 }
 
-function formatNumber(value, maxSignificantDigits = 2, suffix = "") {
+function formatNumber(value, decimalPlaces = 2, suffix = "") {
   if (!Number.isFinite(value)) {
     return "--";
   }
 
-  const requestedDigits = Number.isFinite(maxSignificantDigits) && maxSignificantDigits > 0
-    ? maxSignificantDigits
-    : 2;
-  const precision = Math.max(1, Math.min(21, requestedDigits));
-  const rounded = Number(value).toPrecision(precision);
-  const normalized = Number(rounded);
-  const rendered = Number.isFinite(normalized) ? `${normalized}` : `${rounded}`;
+  const requestedPlaces = Number.isFinite(decimalPlaces) ? decimalPlaces : 2;
+  const precision = Math.max(2, Math.min(20, Math.floor(requestedPlaces)));
+  const rounded = Number(value).toFixed(precision);
+  const rendered = `${rounded}`;
   return suffix ? `${rendered} ${suffix}` : rendered;
 }
 
