@@ -11,19 +11,19 @@
 
 
 .text-scale-primary {
-  font-size: calc(var(--text-scale-primary, 1) * 1em);
+  font-size: calc(var(--text-scale-primary, 1) * 1em) !important;
 }
 
 .text-scale-secondary {
-  font-size: calc(var(--text-scale-secondary, 1) * 1em);
+  font-size: calc(var(--text-scale-secondary, 1) * 1em) !important;
 }
 
 .text-scale-label {
-  font-size: calc(var(--text-scale-label, 1) * 1em);
+  font-size: calc(var(--text-scale-label, 1) * 1em) !important;
 }
 
 .text-scale-ui {
-  font-size: calc(var(--text-scale-ui, 1) * 1em);
+  font-size: calc(var(--text-scale-ui, 1) * 1em) !important;
 }
 
 body {
