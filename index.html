@@ -24,8 +24,12 @@
         <article class="avg-card">
           <p class="avg-label">1 min avg</p>
           <p id="avg1m" class="avg-value">--</p>
+          <p class="avg-sub-label">10s power variability</p>
+          <p id="pv1m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">heart rate</p>
           <p id="hrAvg1m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">HR adherence</p>
+          <p id="hrAdherence1m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">cadence</p>
           <p id="cadAvg1m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">watts / bpm</p>
@@ -34,8 +38,12 @@
         <article class="avg-card">
           <p class="avg-label">3 min avg</p>
           <p id="avg3m" class="avg-value">--</p>
+          <p class="avg-sub-label">10s power variability</p>
+          <p id="pv3m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">heart rate</p>
           <p id="hrAvg3m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">HR adherence</p>
+          <p id="hrAdherence3m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">cadence</p>
           <p id="cadAvg3m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">watts / bpm</p>
@@ -44,8 +52,12 @@
         <article class="avg-card">
           <p class="avg-label">5 min avg</p>
           <p id="avg5m" class="avg-value">--</p>
+          <p class="avg-sub-label">10s power variability</p>
+          <p id="pv5m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">heart rate</p>
           <p id="hrAvg5m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">HR adherence</p>
+          <p id="hrAdherence5m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">cadence</p>
           <p id="cadAvg5m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">watts / bpm</p>
@@ -54,8 +66,12 @@
         <article class="avg-card">
           <p class="avg-label">10 min avg</p>
           <p id="avg10m" class="avg-value">--</p>
+          <p class="avg-sub-label">10s power variability</p>
+          <p id="pv10m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">heart rate</p>
           <p id="hrAvg10m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">HR adherence</p>
+          <p id="hrAdherence10m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">cadence</p>
           <p id="cadAvg10m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">watts / bpm</p>
@@ -64,8 +80,12 @@
         <article class="avg-card">
           <p class="avg-label">20 min avg</p>
           <p id="avg20m" class="avg-value">--</p>
+          <p class="avg-sub-label">10s power variability</p>
+          <p id="pv20m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">heart rate</p>
           <p id="hrAvg20m" class="avg-sub-value">--</p>
+          <p class="avg-sub-label">HR adherence</p>
+          <p id="hrAdherence20m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">cadence</p>
           <p id="cadAvg20m" class="avg-sub-value">--</p>
           <p class="avg-sub-label">watts / bpm</p>
@@ -85,6 +105,13 @@
         </article>
         <article class="avg-card">
           <p class="avg-label">135 BPM Guidance</p>
+          <label class="avg-sub-label" for="targetHrInput">Target HR</label>
+          <div class="ride-programming-row inline-control-row">
+            <input id="targetHrInput" class="ride-input" type="number" min="1" step="1" value="135" aria-label="Target heart rate" />
+            <span class="ride-input-unit">bpm</span>
+          </div>
+          <p class="avg-sub-label">Ride HR adherence</p>
+          <p id="rideHrAdherence" class="avg-sub-value">--</p>
           <p class="avg-sub-label">Current ride avg HR</p>
           <p id="rideAvgHr" class="avg-sub-value">--</p>
           <p class="avg-sub-label">Remaining work</p>
