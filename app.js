@@ -8,6 +8,8 @@ const MAX_AUTO_RECONNECT_ATTEMPTS = 5;
 const AUTO_RECONNECT_INTERVAL_MS = 3000;
 const TARGET_RIDE_AVG_HEART_RATE = 135;
 const BREATHS_PER_BEAT_FACTOR = 0.26;
+const RIDE_START_MIN_WATTS = 100;
+const RIDE_START_REQUIRED_SECONDS = 3;
 
 const connectBtn = document.getElementById("connectBtn");
 const connectHrBtn = document.getElementById("connectHrBtn");
@@ -59,6 +61,7 @@ const startRideBtn = document.getElementById("startRideBtn");
 const rideDoneEl = document.getElementById("rideDone");
 const rideRemainingEl = document.getElementById("rideRemaining");
 const rideEtaEl = document.getElementById("rideEta");
+const rideElapsedEl = document.getElementById("rideElapsed");
 const rideProgressFillEl = document.getElementById("rideProgressFill");
 const rideProgressTrackEl = rideProgressFillEl?.parentElement;
 const navTabs = Array.from(document.querySelectorAll(".nav-tab"));
@@ -235,7 +238,11 @@ function startRideRecording() {
 
   rideState = {
     targetKj,
-    startTimestamp: Date.now(),
+    armedTimestamp: Date.now(),
+    startTimestamp: null,
+    started: false,
+    startThresholdSeconds: 0,
+    lastAboveThresholdTimestamp: null,
     doneKj: 0,
     completed: false,
     totalBreaths: 0,
@@ -246,7 +253,7 @@ function startRideRecording() {
   lastPowerSampleTimestamp = null;
   rideHeartRateSamples = [];
 
-  setStatus(`Ride recording started for ${Math.round(targetKj)} kJ target.`);
+  setStatus(`Ride armed for ${formatNumber(targetKj, 2)} kJ. Starts after ${RIDE_START_REQUIRED_SECONDS}s above ${RIDE_START_MIN_WATTS} W.`);
   updateStartButtonVisibility();
   updateRideProgressUi();
 }
@@ -261,8 +268,11 @@ function calculateRideStats() {
   const avg3mWatts = getWindowAveragePower(Date.now(), WINDOWS_IN_MS["3m"]);
   const etaSeconds = avg3mWatts > 0 ? Math.round((remainingKj * 1000) / avg3mWatts) : null;
   const percentComplete = (doneKj / rideState.targetKj) * 100;
+  const elapsedSeconds = rideState.started && Number.isFinite(rideState.startTimestamp)
+    ? Math.max(0, (Date.now() - rideState.startTimestamp) / 1000)
+    : 0;
 
-  return { doneKj, remainingKj, etaSeconds, percentComplete };
+  return { doneKj, remainingKj, etaSeconds, percentComplete, elapsedSeconds };
 }
 
 function getWindowAveragePower(now, windowMs) {
@@ -299,6 +309,9 @@ function updateRideProgressUi() {
     rideDoneEl.textContent = "Done: -- kJ";
     rideRemainingEl.textContent = "Remaining: -- kJ";
     rideEtaEl.textContent = "ETA: --";
+    if (rideElapsedEl) {
+      rideElapsedEl.textContent = "Elapsed: --:--";
+    }
     rideProgressFillEl.style.width = "0%";
     rideProgressTrackEl?.setAttribute("aria-valuenow", "0");
     updateBreathingMetrics();
@@ -313,18 +326,21 @@ function updateRideProgressUi() {
   }
 
   const percent = Math.min(100, Math.max(0, stats.percentComplete));
-  rideDoneEl.textContent = `Done: ${stats.doneKj.toFixed(1)} kJ`;
-  rideRemainingEl.textContent = `Remaining: ${stats.remainingKj.toFixed(1)} kJ`;
+  rideDoneEl.textContent = `Done: ${formatNumber(stats.doneKj, 2)} kJ`;
+  rideRemainingEl.textContent = `Remaining: ${formatNumber(stats.remainingKj, 2)} kJ`;
   rideEtaEl.textContent = stats.remainingKj <= 0 ? "ETA: Completed" : `ETA: ${formatDuration(stats.etaSeconds)}`;
-  rideProgressFillEl.style.width = `${percent.toFixed(1)}%`;
-  rideProgressTrackEl?.setAttribute("aria-valuenow", percent.toFixed(1));
+  if (rideElapsedEl) {
+    rideElapsedEl.textContent = `Elapsed: ${formatElapsedDuration(stats.elapsedSeconds)}`;
+  }
+  rideProgressFillEl.style.width = `${formatNumber(percent, 2)}%`;
+  rideProgressTrackEl?.setAttribute("aria-valuenow", `${formatNumber(percent, 2)}`);
   updateBreathingMetrics();
   updateGuidancePanel();
   updateStartButtonVisibility();
 
   if (stats.remainingKj <= 0 && !rideState.completed) {
     rideState.completed = true;
-    setStatus(`Ride target complete: ${rideState.targetKj} kJ done.`);
+    setStatus(`Ride target complete: ${formatNumber(rideState.targetKj, 2)} kJ done.`);
   }
 }
 
@@ -345,7 +361,7 @@ function handlePowerNotification(event) {
   latestPowerWatts = watts;
   const parsedPowerMeasurement = parsePowerMeasurementDetails(value, flags);
   latestCadenceRpm = parsedPowerMeasurement.cadence;
-  wattsEl.textContent = watts;
+  wattsEl.textContent = formatNumber(watts, 2);
 
   const now = Date.now();
   addPowerSample(watts, now);
@@ -553,6 +569,12 @@ function accumulateRideEnergy(watts, timestamp) {
     return;
   }
 
+  if (!rideState.started) {
+    maybeStartRideFromPower(watts, timestamp);
+    lastPowerSampleTimestamp = timestamp;
+    return;
+  }
+
   if (lastPowerSampleTimestamp == null) {
     lastPowerSampleTimestamp = timestamp;
     return;
@@ -564,6 +586,38 @@ function accumulateRideEnergy(watts, timestamp) {
   lastPowerSampleTimestamp = timestamp;
 }
 
+function maybeStartRideFromPower(watts, timestamp) {
+  if (!rideState) {
+    return;
+  }
+
+  if (!Number.isFinite(watts) || watts <= RIDE_START_MIN_WATTS) {
+    rideState.startThresholdSeconds = 0;
+    rideState.lastAboveThresholdTimestamp = null;
+    return;
+  }
+
+  if (!Number.isFinite(rideState.lastAboveThresholdTimestamp)) {
+    rideState.lastAboveThresholdTimestamp = timestamp;
+    return;
+  }
+
+  const elapsedSeconds = Math.max(0, (timestamp - rideState.lastAboveThresholdTimestamp) / 1000);
+  if (elapsedSeconds > 2) {
+    rideState.startThresholdSeconds = 0;
+  } else {
+    rideState.startThresholdSeconds += Math.min(elapsedSeconds, 5);
+  }
+  rideState.lastAboveThresholdTimestamp = timestamp;
+
+  if (rideState.startThresholdSeconds >= RIDE_START_REQUIRED_SECONDS) {
+    rideState.started = true;
+    rideState.startTimestamp = timestamp;
+    lastPowerSampleTimestamp = timestamp;
+    setStatus(`Ride started: ${formatNumber(rideState.targetKj, 2)} kJ target.`);
+  }
+}
+
 function handleHeartRateNotification(event) {
   const value = event.target.value;
   const flags = value.getUint8(0);
@@ -571,9 +625,9 @@ function handleHeartRateNotification(event) {
   const heartRate = isHeartRate16Bit ? value.getUint16(1, true) : value.getUint8(1);
 
   latestHeartRateBpm = heartRate;
-  heartRateEl.textContent = heartRate;
+  heartRateEl.textContent = formatNumber(heartRate, 2);
 
-  if (rideState) {
+  if (rideState?.started) {
     const targetHr = getTargetHeartRate();
     rideState.hrSum += heartRate;
     rideState.hrCount += 1;
@@ -652,17 +706,17 @@ function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl,
     ? cadenceSamples.reduce((sum, sample) => sum + sample.cadence, 0) / cadenceSamples.length
     : null;
 
-  powerEl.textContent = Math.round(avgPower);
+  powerEl.textContent = formatNumber(avgPower, 2);
 
   const powerVariability = calculatePowerVariability(now, windowMs, avgPower);
-  variabilityEl.textContent = powerVariability == null ? "--" : `${powerVariability.toFixed(1)}%`;
+  variabilityEl.textContent = powerVariability == null ? "--" : `${formatNumber(powerVariability, 2)}%`;
 
   const targetHr = getTargetHeartRate();
   const hrAdherenceScore = calculateHeartRateAdherenceScore(samplesInWindow, targetHr);
-  hrAdherenceEl.textContent = hrAdherenceScore == null ? "--" : `${hrAdherenceScore.toFixed(1)}%`;
+  hrAdherenceEl.textContent = hrAdherenceScore == null ? "--" : `${formatNumber(hrAdherenceScore, 2)}%`;
 
-  heartRateAvgEl.textContent = Math.round(avgHeartRate);
-  cadenceAvgEl.textContent = avgCadence == null ? "--" : Math.round(avgCadence);
+  heartRateAvgEl.textContent = formatNumber(avgHeartRate, 2);
+  cadenceAvgEl.textContent = avgCadence == null ? "--" : formatNumber(avgCadence, 2);
 
   if (avgHeartRate <= 0) {
     wpHrEl.textContent = "--";
@@ -670,7 +724,7 @@ function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl,
   }
 
   const wattsPerHeartRate = avgPower / avgHeartRate;
-  wpHrEl.textContent = wattsPerHeartRate.toFixed(2);
+  wpHrEl.textContent = formatNumber(wattsPerHeartRate, 2);
 }
 
 
@@ -693,8 +747,8 @@ function updateTargetGuidanceLabel() {
   }
 
   const targetHr = getTargetHeartRate();
-  const displayedTarget = targetHr == null ? TARGET_RIDE_AVG_HEART_RATE : Math.round(targetHr);
-  targetGuidanceLabelEl.textContent = `${displayedTarget} BPM Guidance`;
+  const displayedTarget = targetHr == null ? TARGET_RIDE_AVG_HEART_RATE : targetHr;
+  targetGuidanceLabelEl.textContent = `${formatNumber(displayedTarget, 2)} BPM Guidance`;
 }
 
 function recomputeRideHeartRateTotals() {
@@ -767,7 +821,7 @@ function estimateBreathsPerMinute(heartRate) {
 
 function updateBreathingMetrics() {
   const estBpm = estimateBreathsPerMinute(latestHeartRateBpm);
-  breathsPerMinuteEl.textContent = estBpm == null ? "--" : estBpm.toFixed(1);
+  breathsPerMinuteEl.textContent = estBpm == null ? "--" : formatNumber(estBpm, 2);
 
   const now = Date.now();
   const start3m = now - WINDOWS_IN_MS["3m"];
@@ -780,7 +834,7 @@ function updateBreathingMetrics() {
     const avgPower3m = getWindowAveragePower(now, WINDOWS_IN_MS["3m"]);
     const durationSec = (samples3m[samples3m.length - 1].timestamp - samples3m[0].timestamp) / 1000;
     const kj3m = avgPower3m && durationSec > 0 ? (avgPower3m * durationSec) / 1000 : 0;
-    breathsPerKj3mEl.textContent = kj3m > 0 ? (breaths3m / kj3m).toFixed(1) : "--";
+    breathsPerKj3mEl.textContent = kj3m > 0 ? formatNumber(breaths3m / kj3m, 2) : "--";
   }
 
   if (!rideState || rideState.doneKj <= 0) {
@@ -788,7 +842,7 @@ function updateBreathingMetrics() {
     return;
   }
 
-  breathsPerKjRideEl.textContent = (rideState.totalBreaths / rideState.doneKj).toFixed(1);
+  breathsPerKjRideEl.textContent = formatNumber(rideState.totalBreaths / rideState.doneKj, 2);
 }
 
 function getEstimatedBreathsFromSamples(samples) {
@@ -820,12 +874,12 @@ function updateGuidancePanel() {
   const rideAdherence = rideState.hrCount > 0 && targetHr != null
     ? Math.max(0, 100 * (1 - (rideState.hrAbsErrorSum / rideState.hrCount) / targetHr))
     : null;
-  rideHrAdherenceEl.textContent = rideAdherence == null ? "--" : `${rideAdherence.toFixed(1)}%`;
-  rideAvgHrEl.textContent = rideAvgHr == null ? "--" : `${rideAvgHr.toFixed(1)} bpm`;
-  remainingWorkGuidanceEl.textContent = `${remainingKj.toFixed(1)} kJ`;
+  rideHrAdherenceEl.textContent = rideAdherence == null ? "--" : `${formatNumber(rideAdherence, 2)}%`;
+  rideAvgHrEl.textContent = rideAvgHr == null ? "--" : `${formatNumber(rideAvgHr, 2)} bpm`;
+  remainingWorkGuidanceEl.textContent = `${formatNumber(remainingKj, 2)} kJ`;
 
   const suggestion = computeSuggestedWattsForTargetHr(rideAvgHr, remainingKj);
-  targetGuidanceWattsEl.textContent = suggestion == null ? "--" : `${Math.round(suggestion)} W`;
+  targetGuidanceWattsEl.textContent = suggestion == null ? "--" : `${formatNumber(suggestion, 2)} W`;
 }
 
 function computeSuggestedWattsForTargetHr(rideAvgHr, remainingKj) {
@@ -1379,19 +1433,25 @@ function trendChip(trend) {
 }
 
 function formatAngle(value) {
-  return Number.isFinite(value) ? `${Math.round(value)}°` : "--";
+  return Number.isFinite(value) ? `${formatNumber(value, 2)}°` : "--";
 }
 
-function formatNumber(value, digits = 0, suffix = "") {
+function formatNumber(value, maxSignificantDigits = 2, suffix = "") {
   if (!Number.isFinite(value)) {
     return "--";
   }
 
-  const rounded = digits === 0 ? Math.round(value) : value.toFixed(digits);
-  return suffix ? `${rounded} ${suffix}` : `${rounded}`;
+  const requestedDigits = Number.isFinite(maxSignificantDigits) && maxSignificantDigits > 0
+    ? maxSignificantDigits
+    : 2;
+  const precision = Math.max(1, Math.min(21, requestedDigits));
+  const rounded = Number(value).toPrecision(precision);
+  const normalized = Number(rounded);
+  const rendered = Number.isFinite(normalized) ? `${normalized}` : `${rounded}`;
+  return suffix ? `${rendered} ${suffix}` : rendered;
 }
 
-function formatDiff(leftValue, rightValue, suffix = "", circular = false, digits = 1) {
+function formatDiff(leftValue, rightValue, suffix = "", circular = false, maxSignificantDigits = 2) {
   if (!Number.isFinite(leftValue) || !Number.isFinite(rightValue)) {
     return "--";
   }
@@ -1401,12 +1461,22 @@ function formatDiff(leftValue, rightValue, suffix = "", circular = false, digits
     return "--";
   }
 
-  const rounded = digits === 0 ? Math.round(diff) : diff.toFixed(digits);
-  return suffix ? `${rounded} ${suffix}` : `${rounded}`;
+  return formatNumber(diff, maxSignificantDigits, suffix);
 }
 
 function formatAngleDiff(leftValue, rightValue) {
-  return formatDiff(leftValue, rightValue, "°", true, 1);
+  return formatDiff(leftValue, rightValue, "°", true, 2);
+}
+
+function formatElapsedDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "--:--";
+  }
+
+  const totalSeconds = Math.floor(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
 function getAverageFromSamples(samples, getter) {
