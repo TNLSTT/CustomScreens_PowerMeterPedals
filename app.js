@@ -86,6 +86,19 @@ const scalePrimaryValueEl = document.getElementById("scalePrimaryValue");
 const scaleSecondaryValueEl = document.getElementById("scaleSecondaryValue");
 const scaleLabelValueEl = document.getElementById("scaleLabelValue");
 const scaleUiValueEl = document.getElementById("scaleUiValue");
+const toggleWidgetLayoutBtnEl = document.getElementById("toggleWidgetLayoutBtn");
+const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
+
+const WIDGET_LAYOUT_STORAGE_KEY = "widgetLayout:v1";
+const WIDGET_TRANSFORM_LIMITS = {
+  minScale: 0.6,
+  maxScale: 2.2,
+};
+const widgetLayoutState = {
+  editMode: false,
+  widgets: new Map(),
+  activePointers: new Map(),
+};
 
 const rollingSamples = [];
 const powerSamples = [];
@@ -152,6 +165,7 @@ updatePowerPhaseExplorer();
 renderInstantPhaseFeed();
 updatePowerBandTotalsUi();
 initializeTextScaling();
+initializeWidgetLayoutSystem();
 setInterval(updateRideProgressUi, 1000);
 
 async function connectPowerMeter() {
@@ -1125,6 +1139,286 @@ function applyTextScale(cssVarName, percent, valueEl) {
   const scale = percent / 100;
   document.documentElement.style.setProperty(cssVarName, String(scale));
   valueEl.textContent = `${Math.round(percent)}%`;
+}
+
+function initializeWidgetLayoutSystem() {
+  const widgetEls = Array.from(dashboardViewEl?.querySelectorAll("[data-widget-id]") || []);
+
+  widgetEls.forEach((el) => {
+    const widgetId = el.dataset.widgetId;
+    if (!widgetId) {
+      return;
+    }
+
+    const dragHandle = document.createElement("button");
+    dragHandle.type = "button";
+    dragHandle.className = "widget-drag-handle";
+    dragHandle.textContent = "Move";
+    dragHandle.setAttribute("aria-label", `Move widget ${widgetId}`);
+
+    const resizeHandle = document.createElement("button");
+    resizeHandle.type = "button";
+    resizeHandle.className = "widget-resize-handle";
+    resizeHandle.textContent = "Resize";
+    resizeHandle.setAttribute("aria-label", `Resize widget ${widgetId}`);
+
+    const controls = document.createElement("div");
+    controls.className = "widget-edit-controls";
+    controls.append(dragHandle, resizeHandle);
+
+    el.classList.add("widget-item");
+    el.appendChild(controls);
+
+    const state = {
+      id: widgetId,
+      el,
+      dragHandle,
+      resizeHandle,
+      tx: 0,
+      ty: 0,
+      scale: 1,
+      mode: null,
+      startX: 0,
+      startY: 0,
+      startTx: 0,
+      startTy: 0,
+      startScale: 1,
+    };
+
+    widgetLayoutState.widgets.set(widgetId, state);
+
+    dragHandle.addEventListener("pointerdown", (event) => onWidgetPointerDown(event, state, "drag"));
+    resizeHandle.addEventListener("pointerdown", (event) => onWidgetPointerDown(event, state, "resize"));
+
+    dragHandle.addEventListener("keydown", (event) => onWidgetKeyboardNudge(event, state));
+    resizeHandle.addEventListener("keydown", (event) => onWidgetKeyboardScale(event, state));
+  });
+
+  loadWidgetLayout();
+
+  toggleWidgetLayoutBtnEl?.addEventListener("click", toggleWidgetEditMode);
+  resetWidgetLayoutBtnEl?.addEventListener("click", resetWidgetLayout);
+
+  setWidgetEditMode(false);
+}
+
+function onWidgetPointerDown(event, widget, mode) {
+  if (!widgetLayoutState.editMode) {
+    return;
+  }
+
+  event.preventDefault();
+  const target = event.currentTarget;
+  target?.setPointerCapture?.(event.pointerId);
+
+  widget.mode = mode;
+  widget.startX = event.clientX;
+  widget.startY = event.clientY;
+  widget.startTx = widget.tx;
+  widget.startTy = widget.ty;
+  widget.startScale = widget.scale;
+
+  widgetLayoutState.activePointers.set(event.pointerId, {
+    widget,
+    mode,
+    x: event.clientX,
+    y: event.clientY,
+  });
+
+  target?.addEventListener("pointermove", onWidgetPointerMove);
+  target?.addEventListener("pointerup", onWidgetPointerUp);
+  target?.addEventListener("pointercancel", onWidgetPointerUp);
+
+  widget.el.classList.add("is-active");
+}
+
+function onWidgetPointerMove(event) {
+  const pointerState = widgetLayoutState.activePointers.get(event.pointerId);
+  if (!pointerState) {
+    return;
+  }
+
+  pointerState.x = event.clientX;
+  pointerState.y = event.clientY;
+  const widget = pointerState.widget;
+
+  const pointersForWidget = Array.from(widgetLayoutState.activePointers.values())
+    .filter((entry) => entry.widget === widget);
+
+  if (pointersForWidget.length >= 2) {
+    const [first, second] = pointersForWidget;
+    const currentDistance = Math.hypot(second.x - first.x, second.y - first.y);
+
+    if (!widget.pinchStartDistance) {
+      widget.pinchStartDistance = currentDistance;
+      widget.startScale = widget.scale;
+    } else if (currentDistance > 0) {
+      widget.scale = clamp(
+        (widget.startScale * currentDistance) / widget.pinchStartDistance,
+        WIDGET_TRANSFORM_LIMITS.minScale,
+        WIDGET_TRANSFORM_LIMITS.maxScale,
+      );
+      applyWidgetTransform(widget);
+      persistWidgetLayout();
+    }
+
+    return;
+  }
+
+  const deltaX = event.clientX - widget.startX;
+  const deltaY = event.clientY - widget.startY;
+
+  if (widget.mode === "drag") {
+    widget.tx = widget.startTx + deltaX;
+    widget.ty = widget.startTy + deltaY;
+  } else {
+    const diagonalDelta = (deltaX + deltaY) / 420;
+    widget.scale = clamp(
+      widget.startScale + diagonalDelta,
+      WIDGET_TRANSFORM_LIMITS.minScale,
+      WIDGET_TRANSFORM_LIMITS.maxScale,
+    );
+  }
+
+  applyWidgetTransform(widget);
+}
+
+function onWidgetPointerUp(event) {
+  const pointerState = widgetLayoutState.activePointers.get(event.pointerId);
+  if (!pointerState) {
+    return;
+  }
+
+  const widget = pointerState.widget;
+  widgetLayoutState.activePointers.delete(event.pointerId);
+
+  const target = event.currentTarget;
+  target?.removeEventListener("pointermove", onWidgetPointerMove);
+  target?.removeEventListener("pointerup", onWidgetPointerUp);
+  target?.removeEventListener("pointercancel", onWidgetPointerUp);
+
+  if (!Array.from(widgetLayoutState.activePointers.values()).some((entry) => entry.widget === widget)) {
+    widget.el.classList.remove("is-active");
+    widget.pinchStartDistance = null;
+    persistWidgetLayout();
+  }
+}
+
+function onWidgetKeyboardNudge(event, widget) {
+  if (!widgetLayoutState.editMode) {
+    return;
+  }
+
+  const step = event.shiftKey ? 20 : 8;
+  let handled = true;
+
+  if (event.key === "ArrowUp") {
+    widget.ty -= step;
+  } else if (event.key === "ArrowDown") {
+    widget.ty += step;
+  } else if (event.key === "ArrowLeft") {
+    widget.tx -= step;
+  } else if (event.key === "ArrowRight") {
+    widget.tx += step;
+  } else {
+    handled = false;
+  }
+
+  if (handled) {
+    event.preventDefault();
+    applyWidgetTransform(widget);
+    persistWidgetLayout();
+  }
+}
+
+function onWidgetKeyboardScale(event, widget) {
+  if (!widgetLayoutState.editMode) {
+    return;
+  }
+
+  if (!["+", "=", "-", "_"].includes(event.key)) {
+    return;
+  }
+
+  event.preventDefault();
+  const delta = event.key === "-" || event.key === "_" ? -0.05 : 0.05;
+  widget.scale = clamp(widget.scale + delta, WIDGET_TRANSFORM_LIMITS.minScale, WIDGET_TRANSFORM_LIMITS.maxScale);
+  applyWidgetTransform(widget);
+  persistWidgetLayout();
+}
+
+function applyWidgetTransform(widget) {
+  widget.el.style.transform = `translate(${widget.tx}px, ${widget.ty}px) scale(${widget.scale})`;
+}
+
+function toggleWidgetEditMode() {
+  setWidgetEditMode(!widgetLayoutState.editMode);
+}
+
+function setWidgetEditMode(enabled) {
+  widgetLayoutState.editMode = enabled;
+  dashboardViewEl?.classList.toggle("widget-edit-mode", enabled);
+
+  if (toggleWidgetLayoutBtnEl) {
+    toggleWidgetLayoutBtnEl.textContent = enabled ? "Disable Widget Edit Mode" : "Enable Widget Edit Mode";
+    toggleWidgetLayoutBtnEl.classList.toggle("success", enabled);
+  }
+
+  if (enabled) {
+    setStatus("Widget edit mode enabled: drag, resize, pinch-zoom, or use keyboard arrows/+/-. ");
+  }
+}
+
+function loadWidgetLayout() {
+  const raw = localStorage.getItem(WIDGET_LAYOUT_STORAGE_KEY);
+  if (!raw) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    Object.entries(parsed || {}).forEach(([widgetId, value]) => {
+      const widget = widgetLayoutState.widgets.get(widgetId);
+      if (!widget) {
+        return;
+      }
+
+      widget.tx = Number.isFinite(value.tx) ? value.tx : 0;
+      widget.ty = Number.isFinite(value.ty) ? value.ty : 0;
+      widget.scale = clamp(Number(value.scale) || 1, WIDGET_TRANSFORM_LIMITS.minScale, WIDGET_TRANSFORM_LIMITS.maxScale);
+      applyWidgetTransform(widget);
+    });
+  } catch (error) {
+    setStatus("Saved widget layout was invalid and has been ignored.");
+  }
+}
+
+function persistWidgetLayout() {
+  const serializable = {};
+  widgetLayoutState.widgets.forEach((widget, widgetId) => {
+    serializable[widgetId] = {
+      tx: Math.round(widget.tx),
+      ty: Math.round(widget.ty),
+      scale: Number(widget.scale.toFixed(3)),
+    };
+  });
+  localStorage.setItem(WIDGET_LAYOUT_STORAGE_KEY, JSON.stringify(serializable));
+}
+
+function resetWidgetLayout() {
+  widgetLayoutState.widgets.forEach((widget) => {
+    widget.tx = 0;
+    widget.ty = 0;
+    widget.scale = 1;
+    applyWidgetTransform(widget);
+  });
+
+  localStorage.removeItem(WIDGET_LAYOUT_STORAGE_KEY);
+  setStatus("Widget layout reset.");
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function addPhaseSample(sample) {

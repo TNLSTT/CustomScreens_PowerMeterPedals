@@ -620,3 +620,56 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+.widget-item {
+  position: relative;
+  transform-origin: center;
+  touch-action: none;
+  transition: box-shadow 120ms ease;
+}
+
+.widget-edit-controls {
+  display: none;
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  z-index: 20;
+  gap: 0.3rem;
+}
+
+.widget-edit-mode .widget-edit-controls {
+  display: inline-flex;
+}
+
+.widget-drag-handle,
+.widget-resize-handle {
+  border: 1px solid rgba(125, 211, 252, 0.75);
+  background: rgba(15, 23, 42, 0.92);
+  color: #e0f2fe;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.2rem 0.45rem;
+  cursor: move;
+}
+
+.widget-resize-handle {
+  cursor: nwse-resize;
+}
+
+.widget-edit-mode .widget-item {
+  outline: 1px dashed rgba(125, 211, 252, 0.4);
+  outline-offset: 0.18rem;
+}
+
+.widget-item.is-active {
+  box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.4), 0 0 0 5px rgba(34, 211, 238, 0.17);
+}
+
+.settings-action-row {
+  margin-top: 0.8rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
