@@ -218,6 +218,34 @@ body {
   background: #ddd6fe;
 }
 
+
+.connect-btn.warning {
+  background: #fbbf24;
+}
+
+.connect-btn.warning:hover {
+  background: #fcd34d;
+}
+
+.connect-btn.warning.active {
+  background: #fb7185;
+  color: #fff;
+}
+
+body.reinforcement-out-of-pocket {
+  animation: reinforcement-feedback-flash 0.6s steps(1, end) infinite;
+}
+
+@keyframes reinforcement-feedback-flash {
+  0%, 49% {
+    background: #dc2626;
+  }
+
+  50%, 100% {
+    background: #ffffff;
+  }
+}
+
 .connect-btn:disabled {
   cursor: progress;
   opacity: 0.72;

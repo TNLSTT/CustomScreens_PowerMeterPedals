@@ -13,6 +13,7 @@ const RIDE_START_REQUIRED_SECONDS = 3;
 
 const connectBtn = document.getElementById("connectBtn");
 const connectHrBtn = document.getElementById("connectHrBtn");
+const reinforcementFeedbackBtnEl = document.getElementById("reinforcementFeedbackBtn");
 const buttonGridEl = document.querySelector(".button-grid");
 const wattsEl = document.getElementById("watts");
 const heartRateEl = document.getElementById("heartRate");
@@ -148,12 +149,14 @@ let heartRateConnected = false;
 let rideHeartRateSamples = [];
 let powerBandKjTotals = createEmptyPowerBandTotals();
 let popupGraphWindow = null;
+let reinforcementFeedbackEnabled = false;
 let popupGraphCanvas = null;
 let popupGraphContext = null;
 const popupGraphPoints = [];
 
 connectBtn.addEventListener("click", connectPowerMeter);
 connectHrBtn.addEventListener("click", connectHeartRateMonitor);
+reinforcementFeedbackBtnEl?.addEventListener("click", toggleReinforcementFeedback);
 startRideBtn.addEventListener("click", startRideRecording);
 openPopupGraphBtnEl?.addEventListener("click", openPopupGraphWindow);
 targetHrInputEl?.addEventListener("input", () => {
@@ -161,6 +164,7 @@ targetHrInputEl?.addEventListener("input", () => {
   recomputeRideHeartRateTotals();
   updateRollingAverages();
   updateGuidancePanel();
+  updateReinforcementFeedbackState();
 });
 
 navTabs.forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
@@ -176,6 +180,39 @@ initializeTextScaling();
 initializeWidgetLayoutSystem();
 setInterval(updateRideProgressUi, 1000);
 setInterval(updatePopupGraph, 1000);
+
+function toggleReinforcementFeedback() {
+  reinforcementFeedbackEnabled = !reinforcementFeedbackEnabled;
+
+  if (reinforcementFeedbackBtnEl) {
+    reinforcementFeedbackBtnEl.classList.toggle("active", reinforcementFeedbackEnabled);
+    reinforcementFeedbackBtnEl.setAttribute("aria-pressed", reinforcementFeedbackEnabled ? "true" : "false");
+  }
+
+  if (!reinforcementFeedbackEnabled) {
+    document.body.classList.remove("reinforcement-out-of-pocket");
+  }
+
+  updateReinforcementFeedbackState();
+}
+
+function updateReinforcementFeedbackState() {
+  const targetHr = getTargetHeartRate();
+  const inPocket = isHeartRateInPocket(latestHeartRateBpm, targetHr);
+  const shouldFlash = reinforcementFeedbackEnabled && inPocket === false;
+
+  document.body.classList.toggle("reinforcement-out-of-pocket", shouldFlash);
+}
+
+function isHeartRateInPocket(currentHeartRate, targetHeartRate) {
+  if (!Number.isFinite(currentHeartRate) || !Number.isFinite(targetHeartRate) || targetHeartRate <= 0) {
+    return null;
+  }
+
+  const lowerBound = targetHeartRate * 0.95;
+  const upperBound = targetHeartRate * 1.05;
+  return currentHeartRate >= lowerBound && currentHeartRate <= upperBound;
+}
 
 async function connectPowerMeter() {
   if (!navigator.bluetooth) {
@@ -729,6 +766,7 @@ function handleHeartRateNotification(event) {
   maybeAddRollingSample();
   updateRollingAverages();
   updateRideProgressUi();
+  updateReinforcementFeedbackState();
 }
 
 function maybeAddRollingSample() {
