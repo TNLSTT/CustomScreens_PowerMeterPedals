@@ -179,6 +179,11 @@
           <p class="avg-label">Power Phase Explorer</p>
           <p class="phase-description">Rolling Assioma pedal stroke metrics with circular-angle handling for wraparound.</p>
         </section>
+        <section class="avg-card instant-feed-card" aria-label="Instant power phase updates">
+          <p class="avg-label">Instant Pedal Feed</p>
+          <p class="phase-description">Newest packets first so you can monitor each live power-phase update from both pedals.</p>
+          <div id="instantPhaseFeed" class="instant-phase-feed" role="log" aria-live="polite"></div>
+        </section>
         <section id="phaseWindowGrid" class="phase-window-grid" aria-label="Power phase rolling windows"></section>
         <section class="avg-card baseline-card" aria-label="1 minute versus 10 minute baseline">
           <p class="avg-label">1m vs 10m Baseline Delta</p>

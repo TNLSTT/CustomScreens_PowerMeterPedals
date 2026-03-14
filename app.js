@@ -66,6 +66,7 @@ const dashboardViewEl = document.getElementById("dashboardView");
 const powerPhaseViewEl = document.getElementById("powerPhaseView");
 const phaseWindowGridEl = document.getElementById("phaseWindowGrid");
 const phaseBaselineGridEl = document.getElementById("phaseBaselineGrid");
+const instantPhaseFeedEl = document.getElementById("instantPhaseFeed");
 const settingsViewEl = document.getElementById("settingsView");
 const scalePrimaryInputEl = document.getElementById("scalePrimaryInput");
 const scaleSecondaryInputEl = document.getElementById("scaleSecondaryInput");
@@ -79,6 +80,7 @@ const scaleUiValueEl = document.getElementById("scaleUiValue");
 const rollingSamples = [];
 const powerSamples = [];
 const phaseSamples = [];
+const instantPhaseFeedSamples = [];
 const previousPhaseWindowState = {};
 const WINDOWS_IN_MS = {
   "1m": 1 * 60 * 1000,
@@ -94,6 +96,7 @@ const PHASE_WINDOWS = {
   "10m": 10 * 60 * 1000,
 };
 const PHASE_MAX_WINDOW_MS = PHASE_WINDOWS["10m"];
+const INSTANT_PHASE_FEED_MAX_ROWS = 12;
 
 let powerDevice;
 let heartRateDevice;
@@ -126,6 +129,7 @@ updateConnectionButtonLayout();
 updateTargetGuidanceLabel();
 updateRideProgressUi();
 updatePowerPhaseExplorer();
+renderInstantPhaseFeed();
 initializeTextScaling();
 setInterval(updateRideProgressUi, 1000);
 
@@ -346,6 +350,13 @@ function handlePowerNotification(event) {
   const now = Date.now();
   addPowerSample(watts, now);
   addPhaseSample({
+    timestamp: now,
+    watts,
+    cadence: latestCadenceRpm,
+    heartRate: latestHeartRateBpm,
+    powerPhase: parsedPowerMeasurement.powerPhase,
+  });
+  addInstantPhaseFeedSample({
     timestamp: now,
     watts,
     cadence: latestCadenceRpm,
@@ -1001,6 +1012,68 @@ function applyTextScale(cssVarName, percent, valueEl) {
 function addPhaseSample(sample) {
   phaseSamples.push(sample);
   prunePhaseSamples(sample.timestamp);
+}
+
+function addInstantPhaseFeedSample(sample) {
+  instantPhaseFeedSamples.unshift(sample);
+
+  if (instantPhaseFeedSamples.length > INSTANT_PHASE_FEED_MAX_ROWS) {
+    instantPhaseFeedSamples.length = INSTANT_PHASE_FEED_MAX_ROWS;
+  }
+
+  renderInstantPhaseFeed();
+}
+
+function renderInstantPhaseFeed() {
+  if (!instantPhaseFeedEl) {
+    return;
+  }
+
+  if (instantPhaseFeedSamples.length === 0) {
+    instantPhaseFeedEl.innerHTML = '<p class="instant-feed-empty">No live pedal packets yet.</p>';
+    return;
+  }
+
+  instantPhaseFeedEl.innerHTML = instantPhaseFeedSamples
+    .map((sample) => {
+      const left = sample.powerPhase?.left;
+      const right = sample.powerPhase?.right;
+
+      return `
+        <article class="instant-feed-row">
+          <div class="instant-feed-time">${formatFeedTimestamp(sample.timestamp)}</div>
+          <div class="instant-feed-meta">P ${formatNumber(sample.watts, 0, "W")} · C ${formatNumber(sample.cadence, 0, "rpm")} · HR ${formatNumber(sample.heartRate, 0, "bpm")}</div>
+          <div class="instant-feed-phases">
+            <span>L ${formatPhaseSegment(left)}</span>
+            <span>R ${formatPhaseSegment(right)}</span>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function formatFeedTimestamp(timestamp) {
+  if (!Number.isFinite(timestamp)) {
+    return "--:--:--";
+  }
+
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function formatPhaseSegment(phase) {
+  if (!phase) {
+    return "--";
+  }
+
+  const powerRange = `${formatAngle(phase.start)}→${formatAngle(phase.end)}`;
+  const peakRange = `${formatAngle(phase.peakStart)}→${formatAngle(phase.peakEnd)}`;
+  return `${powerRange} (peak ${peakRange})`;
 }
 
 function prunePhaseSamples(now) {

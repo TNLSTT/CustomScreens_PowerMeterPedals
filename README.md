@@ -6,6 +6,8 @@ It also shows rolling average power for the last **1**, **3**, **5**, **10**, an
 
 It also includes ride programming by target kilojoules (kJ), a ride recording control that hides once active, auto-reconnect attempts if pedals/heart rate disconnect, estimated breathing metrics (breaths/min and breaths per kJ), plus a 135 BPM guidance panel that suggests target watts from recent 5-minute response and ride-remaining work.
 
+The Power Phase Explorer now includes an **Instant Pedal Feed** log so each incoming pedal packet is shown live with timestamp, power/cadence/HR, and left/right phase ranges.
+
 ## 1) Setup instructions
 
 1. Install [Node.js](https://nodejs.org/) (v16+ recommended).
