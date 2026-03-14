@@ -88,6 +88,7 @@ const scaleLabelValueEl = document.getElementById("scaleLabelValue");
 const scaleUiValueEl = document.getElementById("scaleUiValue");
 const toggleWidgetLayoutBtnEl = document.getElementById("toggleWidgetLayoutBtn");
 const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
+const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
 
 const WIDGET_LAYOUT_STORAGE_KEY = "widgetLayout:v1";
 const WIDGET_TRANSFORM_LIMITS = {
@@ -144,10 +145,15 @@ let powerConnected = false;
 let heartRateConnected = false;
 let rideHeartRateSamples = [];
 let powerBandKjTotals = createEmptyPowerBandTotals();
+let popupGraphWindow = null;
+let popupGraphCanvas = null;
+let popupGraphContext = null;
+const popupGraphPoints = [];
 
 connectBtn.addEventListener("click", connectPowerMeter);
 connectHrBtn.addEventListener("click", connectHeartRateMonitor);
 startRideBtn.addEventListener("click", startRideRecording);
+openPopupGraphBtnEl?.addEventListener("click", openPopupGraphWindow);
 targetHrInputEl?.addEventListener("input", () => {
   updateTargetGuidanceLabel();
   recomputeRideHeartRateTotals();
@@ -167,6 +173,7 @@ updatePowerBandTotalsUi();
 initializeTextScaling();
 initializeWidgetLayoutSystem();
 setInterval(updateRideProgressUi, 1000);
+setInterval(updatePopupGraph, 1000);
 
 async function connectPowerMeter() {
   if (!navigator.bluetooth) {
@@ -285,6 +292,7 @@ function startRideRecording() {
   lastPowerSampleTimestamp = null;
   rideHeartRateSamples = [];
   powerBandKjTotals = createEmptyPowerBandTotals();
+  popupGraphPoints.length = 0;
   updatePowerBandTotalsUi();
 
   setStatus(`Ride armed for ${formatNumber(targetKj, 2)} kJ. Starts after ${RIDE_START_REQUIRED_SECONDS}s above ${RIDE_START_MIN_WATTS} W.`);
@@ -418,6 +426,7 @@ function handlePowerNotification(event) {
   maybeAddRollingSample();
   updateRollingAverages();
   updateRideProgressUi();
+  updatePopupGraph();
 }
 
 
@@ -1063,6 +1072,175 @@ setInterval(() => {
   rideState.totalBreaths += breathsPerMinute / 60;
 }, 1000);
 
+
+function openPopupGraphWindow() {
+  if (popupGraphWindow && !popupGraphWindow.closed) {
+    popupGraphWindow.focus();
+    return;
+  }
+
+  popupGraphWindow = window.open("", "powerPopupGraph", "width=620,height=420");
+  if (!popupGraphWindow) {
+    setStatus("Popup blocked. Allow popups to open the graph window.");
+    return;
+  }
+
+  const popupDocument = popupGraphWindow.document;
+  popupDocument.title = "Ride Watts Graph";
+  popupDocument.body.innerHTML = `
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #020617;
+        color: #e2e8f0;
+        font-family: Inter, Segoe UI, Roboto, sans-serif;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        min-height: 100vh;
+      }
+      .popup-header {
+        padding: 0.6rem 0.8rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+        font-size: 0.9rem;
+        letter-spacing: 0.04em;
+      }
+      .popup-chart-wrap {
+        padding: 0.7rem;
+      }
+      canvas {
+        width: 100%;
+        height: 100%;
+        min-height: 300px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        border-radius: 0.4rem;
+        background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
+      }
+    </style>
+    <div class="popup-header">Watts (Y) over ride duration (X)</div>
+    <div class="popup-chart-wrap">
+      <canvas id="popupGraphCanvas" width="580" height="320" aria-label="Ride watts popup graph"></canvas>
+    </div>
+  `;
+
+  popupGraphCanvas = popupDocument.getElementById("popupGraphCanvas");
+  popupGraphContext = popupGraphCanvas?.getContext("2d") || null;
+
+  popupGraphWindow.addEventListener("beforeunload", () => {
+    popupGraphWindow = null;
+    popupGraphCanvas = null;
+    popupGraphContext = null;
+  });
+
+  drawPopupGraph();
+}
+
+function updatePopupGraph() {
+  if (!popupGraphWindow || popupGraphWindow.closed) {
+    popupGraphWindow = null;
+    popupGraphCanvas = null;
+    popupGraphContext = null;
+    return;
+  }
+
+  if (!rideState?.started || !Number.isFinite(rideState.startTimestamp)) {
+    drawPopupGraph();
+    return;
+  }
+
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - rideState.startTimestamp) / 1000));
+  if (!Number.isFinite(latestPowerWatts)) {
+    drawPopupGraph();
+    return;
+  }
+
+  const lastPoint = popupGraphPoints[popupGraphPoints.length - 1];
+  if (!lastPoint || lastPoint.t !== elapsedSeconds) {
+    popupGraphPoints.push({ t: elapsedSeconds, watts: latestPowerWatts });
+  } else {
+    lastPoint.watts = latestPowerWatts;
+  }
+
+  const stats = calculateRideStats();
+  const estimatedDuration = stats && Number.isFinite(stats.etaSeconds)
+    ? elapsedSeconds + Math.max(0, stats.etaSeconds)
+    : Math.max(elapsedSeconds, popupGraphPoints.length > 0 ? popupGraphPoints[popupGraphPoints.length - 1].t : 0);
+
+  const maxDurationSeconds = Math.max(60, estimatedDuration);
+
+  while (popupGraphPoints.length > 0 && popupGraphPoints[0].t < elapsedSeconds - maxDurationSeconds) {
+    popupGraphPoints.shift();
+  }
+
+  drawPopupGraph(maxDurationSeconds);
+}
+
+function drawPopupGraph(maxDurationSeconds = 60) {
+  if (!popupGraphCanvas || !popupGraphContext) {
+    return;
+  }
+
+  const ctx = popupGraphContext;
+  const width = popupGraphCanvas.width;
+  const height = popupGraphCanvas.height;
+  const padding = { top: 16, right: 16, bottom: 34, left: 52 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+
+  ctx.clearRect(0, 0, width, height);
+
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padding.left, padding.top);
+  ctx.lineTo(padding.left, height - padding.bottom);
+  ctx.lineTo(width - padding.right, height - padding.bottom);
+  ctx.stroke();
+
+  const maxWatts = Math.max(200, ...popupGraphPoints.map((point) => point.watts));
+  const yTickStep = Math.max(50, Math.round(maxWatts / 4 / 10) * 10);
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "12px sans-serif";
+
+  for (let y = 0; y <= maxWatts; y += yTickStep) {
+    const yPos = height - padding.bottom - (y / maxWatts) * innerHeight;
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.5)";
+    ctx.beginPath();
+    ctx.moveTo(padding.left, yPos);
+    ctx.lineTo(width - padding.right, yPos);
+    ctx.stroke();
+    ctx.fillText(String(y), 8, yPos + 4);
+  }
+
+  ctx.fillText("Watts", 8, padding.top + 12);
+  ctx.fillText(`0s`, padding.left, height - 10);
+  ctx.fillText(`${Math.round(maxDurationSeconds)}s`, width - padding.right - 28, height - 10);
+
+  if (popupGraphPoints.length === 0) {
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText("Start ride recording to populate graph.", padding.left + 10, padding.top + 24);
+    return;
+  }
+
+  ctx.strokeStyle = "#ef4444";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  popupGraphPoints.forEach((point, index) => {
+    const x = padding.left + (Math.min(point.t, maxDurationSeconds) / maxDurationSeconds) * innerWidth;
+    const clampedWatts = Math.max(0, Math.min(point.watts, maxWatts));
+    const y = height - padding.bottom - (clampedWatts / maxWatts) * innerHeight;
+
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+
+  ctx.stroke();
+}
 
 function switchView(viewName) {
   const activeView = ["dashboard", "powerPhase", "settings"].includes(viewName)
