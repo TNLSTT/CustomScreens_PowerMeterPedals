@@ -89,6 +89,11 @@ const gameCurrentWattsEl = document.getElementById("gameCurrentWatts");
 const gameDeltaPercentEl = document.getElementById("gameDeltaPercent");
 const gameSensitivityInputEl = document.getElementById("gameSensitivityInput");
 const gameSensitivityValueEl = document.getElementById("gameSensitivityValue");
+const gameObstaclesEl = document.getElementById("gameObstacles");
+const gameScoreEl = document.getElementById("gameScore");
+const gameBestScoreEl = document.getElementById("gameBestScore");
+const gameDodgesEl = document.getElementById("gameDodges");
+const gameMessageEl = document.getElementById("gameMessage");
 const scalePrimaryInputEl = document.getElementById("scalePrimaryInput");
 const scaleSecondaryInputEl = document.getElementById("scaleSecondaryInput");
 const scaleLabelInputEl = document.getElementById("scaleLabelInput");
@@ -170,6 +175,7 @@ let highCadenceStartedAtMs = null;
 let lastAutoNavigateAtMs = 0;
 const popupGraphPoints = [];
 const GAME_SENSITIVITY_STORAGE_KEY = "gameSensitivityPercent:v1";
+const GAME_BEST_SCORE_STORAGE_KEY = "gameBestScore:v1";
 const gameState = {
   riderYPercent: 50,
   smoothedVelocity: 0,
@@ -178,6 +184,15 @@ const gameState = {
   baselineWatts: null,
   sensitivityPercent: 4,
   lastUpdateMs: Date.now(),
+  score: 0,
+  bestScore: 0,
+  dodges: 0,
+  isCrashed: false,
+  crashCooldownMs: 0,
+  obstacleSpawnCooldownMs: 900,
+  obstacleSpawnTimerMs: 650,
+  obstacles: [],
+  obstacleSerial: 0,
 };
 
 connectBtn.addEventListener("click", connectPowerMeter);
@@ -1448,10 +1463,15 @@ function initializeGameTab() {
     updateGameSensitivityLabel();
   });
 
+  const storedBestScore = Number(localStorage.getItem(GAME_BEST_SCORE_STORAGE_KEY));
+  gameState.bestScore = Number.isFinite(storedBestScore) && storedBestScore > 0 ? Math.floor(storedBestScore) : 0;
+
   renderGameTrackMarkers();
   window.addEventListener("resize", renderGameTrackMarkers);
   updateGameHud();
   renderGameRider();
+  renderGameObstacles();
+  setGameMessage("Dodge objects and rack up points!");
 }
 
 function updateGameSensitivityLabel() {
@@ -1492,9 +1512,11 @@ function updateGameState() {
   const scrollSpeedPx = 4 + Math.abs(gameState.smoothedVelocity) * 2.8;
   gameState.markerOffsetPx = (gameState.markerOffsetPx + scrollSpeedPx * movementScale) % gameState.markerSpacingPx;
 
+  updateGameObstacles(elapsedMs, movementScale, scrollSpeedPx);
   updateGameHud(currentWatts, baseline);
   renderGameRider();
   renderGameTrackMarkers();
+  renderGameObstacles();
 }
 
 function getCurrentGameBaselineWatts() {
@@ -1528,6 +1550,17 @@ function getCurrentGameBaselineWatts() {
 }
 
 function updateGameHud(currentWatts = latestPowerWatts, baseline = gameState.baselineWatts) {
+  if (gameScoreEl) {
+    gameScoreEl.textContent = String(Math.max(0, Math.floor(gameState.score)));
+  }
+
+  if (gameBestScoreEl) {
+    gameBestScoreEl.textContent = String(Math.max(0, Math.floor(gameState.bestScore)));
+  }
+
+  if (gameDodgesEl) {
+    gameDodgesEl.textContent = String(Math.max(0, Math.floor(gameState.dodges)));
+  }
   if (gameBaselineWattsEl) {
     gameBaselineWattsEl.textContent = Number.isFinite(baseline) ? `${formatNumber(baseline, 2)} W` : "--";
   }
@@ -1569,6 +1602,124 @@ function renderGameTrackMarkers() {
   }
 
   gameTrackMarkersEl.innerHTML = markers.join("");
+}
+
+
+function updateGameObstacles(elapsedMs, movementScale, scrollSpeedPx) {
+  if (!gameSceneEl) {
+    return;
+  }
+
+  if (gameState.crashCooldownMs > 0) {
+    gameState.crashCooldownMs = Math.max(0, gameState.crashCooldownMs - elapsedMs);
+    if (gameState.crashCooldownMs === 0) {
+      gameState.isCrashed = false;
+      gameState.score = 0;
+      gameState.dodges = 0;
+      gameState.obstacles = [];
+      gameState.obstacleSpawnTimerMs = 600;
+      setGameMessage("Recovered. Build your streak!");
+    }
+    return;
+  }
+
+  const sceneWidth = gameSceneEl.clientWidth;
+  const obstacleSpeed = (3.6 + scrollSpeedPx * 0.55) * movementScale;
+
+  gameState.obstacleSpawnTimerMs -= elapsedMs;
+  if (gameState.obstacleSpawnTimerMs <= 0) {
+    spawnGameObstacle(sceneWidth);
+    const difficultyFactor = Math.min(0.42, gameState.score / 9000);
+    gameState.obstacleSpawnCooldownMs = 900 - difficultyFactor * 520;
+    gameState.obstacleSpawnTimerMs = gameState.obstacleSpawnCooldownMs;
+  }
+
+  const riderCenter = gameState.riderYPercent;
+  const riderTop = riderCenter - 6;
+  const riderBottom = riderCenter + 6;
+
+  gameState.obstacles.forEach((obstacle) => {
+    obstacle.x -= obstacleSpeed;
+
+    if (!obstacle.cleared && obstacle.x + obstacle.sizePx < 132) {
+      obstacle.cleared = true;
+      gameState.dodges += 1;
+      gameState.score += 75;
+    }
+
+    const obstacleLeft = obstacle.x;
+    const obstacleRight = obstacle.x + obstacle.sizePx;
+    const obstacleTop = obstacle.yPercent - obstacle.heightPercent / 2;
+    const obstacleBottom = obstacle.yPercent + obstacle.heightPercent / 2;
+    const horizontalHit = obstacleRight >= 80 && obstacleLeft <= 128;
+    const verticalHit = obstacleBottom >= riderTop && obstacleTop <= riderBottom;
+
+    if (horizontalHit && verticalHit) {
+      triggerGameCrash();
+    }
+  });
+
+  gameState.obstacles = gameState.obstacles.filter((obstacle) => obstacle.x > -90);
+
+  if (!gameState.isCrashed) {
+    gameState.score += Math.max(1, Math.round(elapsedMs * 0.05));
+    if (gameState.score > gameState.bestScore) {
+      gameState.bestScore = gameState.score;
+      localStorage.setItem(GAME_BEST_SCORE_STORAGE_KEY, String(Math.floor(gameState.bestScore)));
+    }
+  }
+}
+
+function spawnGameObstacle(sceneWidth) {
+  if (!Number.isFinite(sceneWidth) || sceneWidth <= 0) {
+    return;
+  }
+
+  const centerVariance = (Math.random() - 0.5) * 64;
+  const yPercent = Math.min(92, Math.max(8, 50 + centerVariance));
+  const sizePx = 26 + Math.random() * 28;
+  const heightPercent = 8 + Math.random() * 8;
+
+  gameState.obstacleSerial += 1;
+  gameState.obstacles.push({
+    id: gameState.obstacleSerial,
+    x: sceneWidth + 32,
+    yPercent,
+    sizePx,
+    heightPercent,
+    cleared: false,
+  });
+}
+
+function triggerGameCrash() {
+  if (gameState.isCrashed) {
+    return;
+  }
+
+  gameState.isCrashed = true;
+  gameState.crashCooldownMs = 1200;
+  gameState.obstacles = [];
+  setGameMessage("Crash! Hold steady and try again.");
+}
+
+function setGameMessage(message) {
+  if (!gameMessageEl) {
+    return;
+  }
+
+  gameMessageEl.textContent = message;
+}
+
+function renderGameObstacles() {
+  if (!gameObstaclesEl) {
+    return;
+  }
+
+  const obstacleMarkup = gameState.obstacles
+    .map((obstacle) => `<span class="game-obstacle" style="left:${formatNumber(obstacle.x, 2)}px;top:${formatNumber(obstacle.yPercent, 2)}%;width:${formatNumber(obstacle.sizePx, 2)}px;height:${formatNumber(obstacle.heightPercent, 2)}%;"></span>`)
+    .join("");
+
+  gameObstaclesEl.innerHTML = obstacleMarkup;
 }
 
 function initializeTextScaling() {

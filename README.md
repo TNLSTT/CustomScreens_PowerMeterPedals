@@ -10,6 +10,8 @@ The main dashboard now also tracks accumulated energy (kJ) in power buckets: **0
 
 The Power Phase Explorer now includes an **Instant Pedal Feed** log so each incoming pedal packet is shown live with timestamp, power/cadence/HR, and left/right phase ranges.
 
+The Game tab now includes a dodge mode with moving obstacles, score tracking, best-score persistence, and dodge counters to make pacing more playful.
+
 ## 1) Setup instructions
 
 1. Install [Node.js](https://nodejs.org/) (v16+ recommended).
