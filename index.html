@@ -8,11 +8,48 @@
   </head>
   <body>
     <main class="dashboard">
-      <nav class="top-nav" aria-label="View navigation">
-        <button class="nav-tab active" data-view="dashboard" type="button">Main Dashboard</button>
-        <button class="nav-tab" data-view="powerPhase" type="button">Power Phase Explorer</button>
-        <button class="nav-tab" data-view="settings" type="button">Settings</button>
-      </nav>
+      <section class="top-toolbar" aria-label="Primary controls">
+        <nav class="top-nav" aria-label="View navigation">
+          <button class="nav-tab active" data-view="dashboard" type="button">Main Dashboard</button>
+          <button class="nav-tab" data-view="powerPhase" type="button">Power Phase Explorer</button>
+          <button class="nav-tab" data-view="settings" type="button">Settings</button>
+        </nav>
+
+        <div class="top-toolbar-controls">
+          <div class="button-grid" data-widget-id="connectionButtons">
+            <button id="connectBtn" class="connect-btn" type="button">
+              Connect Assioma Pedals
+            </button>
+            <button id="connectHrBtn" class="connect-btn secondary" type="button">
+              Connect Heart Rate Monitor
+            </button>
+            <button id="reinforcementFeedbackBtn" class="connect-btn warning" type="button" aria-pressed="false">
+              Reinforcement Feedback
+            </button>
+          </div>
+
+          <section class="ride-controls" aria-label="Ride programming and recording" data-widget-id="rideControls">
+            <label class="ride-label" for="targetKj">Ride target</label>
+            <div class="ride-programming-row">
+              <input
+                id="targetKj"
+                class="ride-input"
+                type="number"
+                min="1"
+                step="1"
+                value="500"
+                aria-label="Target kilojoules"
+              />
+              <span class="ride-input-unit">kJ</span>
+              <button id="startRideBtn" class="connect-btn success" type="button">
+                Start Ride Recording
+              </button>
+            </div>
+          </section>
+
+          <p id="status" class="status" data-widget-id="connectionStatus">Not connected</p>
+        </div>
+      </section>
 
       <section id="dashboardView" class="view-panel active" aria-label="Main dashboard">
         <section class="ride-progress" aria-label="Ride completion progress" data-widget-id="rideProgress">
@@ -177,39 +214,6 @@
             </article>
           </div>
         </section>
-
-        <div class="button-grid" data-widget-id="connectionButtons">
-          <button id="connectBtn" class="connect-btn" type="button">
-            Connect Assioma Pedals
-          </button>
-          <button id="connectHrBtn" class="connect-btn secondary" type="button">
-            Connect Heart Rate Monitor
-          </button>
-          <button id="reinforcementFeedbackBtn" class="connect-btn warning" type="button" aria-pressed="false">
-            Reinforcement Feedback
-          </button>
-        </div>
-
-        <section class="ride-controls" aria-label="Ride programming and recording" data-widget-id="rideControls">
-          <label class="ride-label" for="targetKj">Ride target</label>
-          <div class="ride-programming-row">
-            <input
-              id="targetKj"
-              class="ride-input"
-              type="number"
-              min="1"
-              step="1"
-              value="500"
-              aria-label="Target kilojoules"
-            />
-            <span class="ride-input-unit">kJ</span>
-            <button id="startRideBtn" class="connect-btn success" type="button">
-              Start Ride Recording
-            </button>
-          </div>
-        </section>
-
-        <p id="status" class="status" data-widget-id="connectionStatus">Not connected</p>
 
       </section>
 
