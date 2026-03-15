@@ -15,6 +15,18 @@
       </nav>
 
       <section id="dashboardView" class="view-panel active" aria-label="Main dashboard">
+        <section class="ride-progress" aria-label="Ride completion progress" data-widget-id="rideProgress">
+          <div class="ride-progress-details">
+            <span id="rideDone">Done: -- kJ</span>
+            <span id="rideRemaining">Remaining: -- kJ</span>
+            <span id="rideEta">ETA: --</span>
+            <span id="rideElapsed">Elapsed: --:--</span>
+          </div>
+          <div class="ride-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Ride completion percentage">
+            <div id="rideProgressFill" class="ride-progress-fill"></div>
+          </div>
+        </section>
+
         <section class="top-band" aria-label="Live and guidance overview" data-widget-id="liveOverview">
           <div class="live-metrics">
             <section class="metric-block" aria-label="Current power">
@@ -199,17 +211,6 @@
 
         <p id="status" class="status" data-widget-id="connectionStatus">Not connected</p>
 
-        <section class="ride-progress" aria-label="Ride completion progress" data-widget-id="rideProgress">
-          <div class="ride-progress-details">
-            <span id="rideDone">Done: -- kJ</span>
-            <span id="rideRemaining">Remaining: -- kJ</span>
-            <span id="rideEta">ETA: --</span>
-            <span id="rideElapsed">Elapsed: --:--</span>
-          </div>
-          <div class="ride-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Ride completion percentage">
-            <div id="rideProgressFill" class="ride-progress-fill"></div>
-          </div>
-        </section>
       </section>
 
       <section id="powerPhaseView" class="view-panel" aria-label="Power phase explorer" hidden>
