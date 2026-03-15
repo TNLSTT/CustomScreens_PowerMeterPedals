@@ -680,6 +680,17 @@ body.reinforcement-out-of-pocket {
   font-size: 0.95rem;
 }
 
+.settings-checkbox-row {
+  grid-template-columns: minmax(180px, 1fr) auto;
+}
+
+.settings-checkbox-input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #22d3ee;
+  justify-self: end;
+}
+
 @media (max-width: 720px) {
   .settings-row {
     grid-template-columns: 1fr;
@@ -688,6 +699,10 @@ body.reinforcement-out-of-pocket {
 
   .settings-value {
     text-align: left;
+  }
+
+  .settings-checkbox-input {
+    justify-self: start;
   }
 }
 

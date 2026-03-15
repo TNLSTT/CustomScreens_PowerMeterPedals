@@ -109,8 +109,10 @@ const scalePowerBandBucketsValueEl = document.getElementById("scalePowerBandBuck
 const toggleWidgetLayoutBtnEl = document.getElementById("toggleWidgetLayoutBtn");
 const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
 const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
+const reportEfficiencyCheckboxEl = document.getElementById("reportEfficiencyCheckbox");
 
 const WIDGET_LAYOUT_STORAGE_KEY = "widgetLayout:v1";
+const REPORT_EFFICIENCY_STORAGE_KEY = "reportEfficiencyEnabled:v1";
 const POPUP_GRAPH_MIN_DURATION_SECONDS = 300;
 const POPUP_GRAPH_MAX_WATTS = 500;
 const WIDGET_TRANSFORM_LIMITS = {
@@ -200,6 +202,9 @@ connectHrBtn.addEventListener("click", connectHeartRateMonitor);
 reinforcementFeedbackBtnEl?.addEventListener("click", toggleReinforcementFeedback);
 startRideBtn.addEventListener("click", startRideRecording);
 openPopupGraphBtnEl?.addEventListener("click", openPopupGraphWindow);
+reportEfficiencyCheckboxEl?.addEventListener("change", () => {
+  localStorage.setItem(REPORT_EFFICIENCY_STORAGE_KEY, reportEfficiencyCheckboxEl.checked ? "1" : "0");
+});
 targetHrInputEl?.addEventListener("input", () => {
   updateTargetGuidanceLabel();
   recomputeRideHeartRateTotals();
@@ -226,6 +231,7 @@ updatePowerPhaseExplorer();
 renderInstantPhaseFeed();
 updatePowerBandTotalsUi();
 initializeTextScaling();
+initializeReportSettings();
 initializeWidgetLayoutSystem();
 initializeGameTab();
 setInterval(updateRideProgressUi, 1000);
@@ -387,6 +393,8 @@ function startRideRecording() {
     hrSum: 0,
     hrCount: 0,
     hrAbsErrorSum: 0,
+    efficiencySamples: [],
+    reportsDownloaded: false,
   };
   lastPowerSampleTimestamp = null;
   rideHeartRateSamples = [];
@@ -482,6 +490,7 @@ function updateRideProgressUi() {
   if (stats.remainingKj <= 0 && !rideState.completed) {
     rideState.completed = true;
     setStatus(`Ride target complete: ${formatNumber(rideState.targetKj, 2)} kJ done.`);
+    maybeDownloadRideReports();
   }
 }
 
@@ -880,13 +889,19 @@ function maybeAddRollingSample() {
   }
 
   const now = Date.now();
-  rollingSamples.push({
+  const sample = {
     watts: latestPowerWatts,
     heartRate: latestHeartRateBpm,
     cadence: latestCadenceRpm,
     breathsPerMinute: estimateBreathsPerMinute(latestHeartRateBpm),
     timestamp: now,
-  });
+  };
+
+  rollingSamples.push(sample);
+
+  if (rideState?.started) {
+    rideState.efficiencySamples.push(sample);
+  }
 
   pruneRollingSamples(now);
 }
@@ -2473,6 +2488,111 @@ function getAverageFromSamples(samples, getter) {
 
 function isFiniteAngle(value) {
   return Number.isFinite(value);
+}
+
+
+function initializeReportSettings() {
+  if (!reportEfficiencyCheckboxEl) {
+    return;
+  }
+
+  const storedValue = localStorage.getItem(REPORT_EFFICIENCY_STORAGE_KEY);
+  reportEfficiencyCheckboxEl.checked = storedValue === "1";
+}
+
+function maybeDownloadRideReports() {
+  if (!rideState || rideState.reportsDownloaded) {
+    return;
+  }
+
+  rideState.reportsDownloaded = true;
+
+  if (reportEfficiencyCheckboxEl?.checked) {
+    const csv = buildEfficiencyReportCsv(rideState);
+    if (csv) {
+      const timestampLabel = new Date().toISOString().replaceAll(":", "-");
+      triggerCsvDownload(`efficiency-report-${timestampLabel}.csv`, csv);
+      setStatus(`Ride target complete: ${formatNumber(rideState.targetKj, 2)} kJ done. Efficiency report downloaded.`);
+    }
+  }
+}
+
+function buildEfficiencyReportCsv(currentRideState) {
+  if (!currentRideState?.started || !Number.isFinite(currentRideState.startTimestamp)) {
+    return "";
+  }
+
+  const samples = currentRideState.efficiencySamples || [];
+  if (samples.length === 0) {
+    return "";
+  }
+
+  const minuteBuckets = new Map();
+
+  samples.forEach((sample) => {
+    const minuteIndex = Math.floor(Math.max(0, sample.timestamp - currentRideState.startTimestamp) / 60000);
+    const bucket = minuteBuckets.get(minuteIndex) || {
+      wattsSum: 0,
+      wattsCount: 0,
+      heartRateSum: 0,
+      heartRateCount: 0,
+      cadenceSum: 0,
+      cadenceCount: 0,
+    };
+
+    if (Number.isFinite(sample.watts)) {
+      bucket.wattsSum += sample.watts;
+      bucket.wattsCount += 1;
+    }
+
+    if (Number.isFinite(sample.heartRate)) {
+      bucket.heartRateSum += sample.heartRate;
+      bucket.heartRateCount += 1;
+    }
+
+    if (Number.isFinite(sample.cadence)) {
+      bucket.cadenceSum += sample.cadence;
+      bucket.cadenceCount += 1;
+    }
+
+    minuteBuckets.set(minuteIndex, bucket);
+  });
+
+  const minutes = Array.from(minuteBuckets.keys()).sort((left, right) => left - right);
+  const lines = ["minute,avg_watts,avg_heart_rate,avg_cadence"];
+
+  minutes.forEach((minuteIndex) => {
+    const bucket = minuteBuckets.get(minuteIndex);
+    const avgWatts = bucket.wattsCount > 0 ? bucket.wattsSum / bucket.wattsCount : null;
+    const avgHeartRate = bucket.heartRateCount > 0 ? bucket.heartRateSum / bucket.heartRateCount : null;
+    const avgCadence = bucket.cadenceCount > 0 ? bucket.cadenceSum / bucket.cadenceCount : null;
+
+    lines.push([
+      minuteIndex + 1,
+      Number.isFinite(avgWatts) ? Number(avgWatts).toFixed(2) : "",
+      Number.isFinite(avgHeartRate) ? Number(avgHeartRate).toFixed(2) : "",
+      Number.isFinite(avgCadence) ? Number(avgCadence).toFixed(2) : "",
+    ].join(","));
+  });
+
+  return lines.join("\n");
+}
+
+function triggerCsvDownload(fileName, csvContent) {
+  if (!csvContent) {
+    return;
+  }
+
+  const csvBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+  const downloadUrl = URL.createObjectURL(csvBlob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(downloadUrl);
 }
 
 function setStatus(message) {
