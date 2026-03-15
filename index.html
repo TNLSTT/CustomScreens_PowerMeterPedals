@@ -277,6 +277,9 @@
             <div class="game-stat"><span class="avg-sub-label">Target-HR watts</span><span id="gameBaselineWatts" class="avg-sub-value">--</span></div>
             <div class="game-stat"><span class="avg-sub-label">Current watts</span><span id="gameCurrentWatts" class="avg-sub-value">--</span></div>
             <div class="game-stat"><span class="avg-sub-label">Delta</span><span id="gameDeltaPercent" class="avg-sub-value">--</span></div>
+            <div class="game-stat"><span class="avg-sub-label">Score</span><span id="gameScore" class="avg-sub-value">0</span></div>
+            <div class="game-stat"><span class="avg-sub-label">Best</span><span id="gameBestScore" class="avg-sub-value">0</span></div>
+            <div class="game-stat"><span class="avg-sub-label">Dodges</span><span id="gameDodges" class="avg-sub-value">0</span></div>
             <label class="game-sensitivity" for="gameSensitivityInput">
               <span class="avg-sub-label">Sensitivity (% watts for full up/down)</span>
               <div class="game-sensitivity-row">
@@ -290,8 +293,10 @@
             <div class="game-layer game-layer-far"></div>
             <div class="game-layer game-layer-near"></div>
             <div class="game-track-markers" id="gameTrackMarkers"></div>
+            <div class="game-obstacles" id="gameObstacles" aria-hidden="true"></div>
             <div id="gameRider" class="game-rider" role="img" aria-label="Flying bicyclist">🚴</div>
             <div class="game-level-line" aria-hidden="true"></div>
+            <p id="gameMessage" class="game-message">Dodge objects and rack up points!</p>
           </div>
         </section>
       </section>
