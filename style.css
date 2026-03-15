@@ -42,6 +42,21 @@ body {
   background: rgba(15, 23, 42, 0.72);
 }
 
+
+.top-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.65rem;
+}
+
+.top-toolbar-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem 0.6rem;
+}
+
 .metric-block {
   margin: 0;
 }
@@ -170,41 +185,26 @@ body {
 }
 
 .button-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
   margin-top: 0;
 }
 
-.button-grid.compact {
-  position: fixed;
-  top: 3.9rem;
-  right: 0.75rem;
-  z-index: 50;
-  width: auto;
-  display: flex;
-  gap: 0.45rem;
-}
 
 .connect-btn {
-  width: 100%;
-  padding: 0.62rem 0.9rem;
+  width: auto;
+  padding: 0.42rem 0.75rem;
   border: 0;
   border-radius: 0.6rem;
-  font-size: clamp(1rem, 1.5vw, 1.5rem);
+  font-size: clamp(0.74rem, 0.95vw, 0.9rem);
   font-weight: 700;
   color: #0f172a;
   background: #22d3ee;
   cursor: pointer;
 }
 
-.button-grid.compact .connect-btn {
-  width: auto;
-  padding: 0.38rem 0.7rem;
-  border-radius: 999px;
-  font-size: 0.77rem;
-  opacity: 0.9;
-}
 
 .connect-btn:hover {
   background: #67e8f9;
@@ -252,10 +252,12 @@ body.reinforcement-out-of-pocket {
 }
 
 .status {
-  margin: 0.1rem 0 0;
-  min-height: 1.25rem;
-  font-size: clamp(0.95rem, 1.25vw, 1.3rem);
+  margin: 0;
+  min-height: 1.1rem;
+  font-size: clamp(0.72rem, 0.85vw, 0.86rem);
   color: #cbd5e1;
+  grid-column: 1 / -1;
+  text-align: right;
 }
 
 .ride-controls {
@@ -264,8 +266,8 @@ body.reinforcement-out-of-pocket {
 
 .ride-label {
   display: block;
-  margin-bottom: 0.3rem;
-  font-size: clamp(0.76rem, 1vw, 1rem);
+  margin-bottom: 0.15rem;
+  font-size: clamp(0.68rem, 0.8vw, 0.8rem);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #94a3b8;
@@ -273,23 +275,23 @@ body.reinforcement-out-of-pocket {
 
 .ride-programming-row {
   display: grid;
-  grid-template-columns: 130px auto 1fr;
-  gap: 0.45rem;
+  grid-template-columns: 86px auto auto;
+  gap: 0.35rem;
   align-items: center;
 }
 
 .ride-input {
   width: 100%;
-  padding: 0.48rem 0.5rem;
+  padding: 0.34rem 0.4rem;
   border-radius: 0.5rem;
   border: 1px solid rgba(148, 163, 184, 0.35);
   background: rgba(15, 23, 42, 0.75);
   color: #f8fafc;
-  font-size: clamp(1rem, 1.5vw, 1.4rem);
+  font-size: clamp(0.82rem, 0.95vw, 0.95rem);
 }
 
 .ride-input-unit {
-  font-size: clamp(0.9rem, 1.1vw, 1.15rem);
+  font-size: clamp(0.72rem, 0.8vw, 0.82rem);
   color: #93c5fd;
   text-transform: uppercase;
 }
@@ -349,6 +351,23 @@ body.reinforcement-out-of-pocket {
 }
 
 @media (max-width: 1500px) {
+  .top-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .top-toolbar-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .button-grid {
+    justify-content: flex-start;
+  }
+
+  .status {
+    text-align: left;
+  }
+
+
   .top-band {
     grid-template-columns: 1fr;
   }
@@ -381,18 +400,20 @@ body.reinforcement-out-of-pocket {
     gap: 0.25rem;
   }
 
-  .button-grid.compact {
-    position: static;
-    display: grid;
-    width: 100%;
-    margin-top: 0.4rem;
+  .top-toolbar {
+    grid-template-columns: 1fr;
   }
 
-  .button-grid.compact .connect-btn {
-    width: 100%;
-    border-radius: 0.6rem;
-    padding: 0.72rem 1rem;
-    font-size: 0.98rem;
+  .top-toolbar-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .button-grid {
+    justify-content: flex-start;
+  }
+
+  .status {
+    text-align: left;
   }
 }
 
