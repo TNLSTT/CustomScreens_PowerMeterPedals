@@ -76,6 +76,15 @@ const phaseWindowGridEl = document.getElementById("phaseWindowGrid");
 const phaseBaselineGridEl = document.getElementById("phaseBaselineGrid");
 const instantPhaseFeedEl = document.getElementById("instantPhaseFeed");
 const settingsViewEl = document.getElementById("settingsView");
+const gameViewEl = document.getElementById("gameView");
+const gameSceneEl = document.getElementById("gameScene");
+const gameRiderEl = document.getElementById("gameRider");
+const gameTrackMarkersEl = document.getElementById("gameTrackMarkers");
+const gameBaselineWattsEl = document.getElementById("gameBaselineWatts");
+const gameCurrentWattsEl = document.getElementById("gameCurrentWatts");
+const gameDeltaPercentEl = document.getElementById("gameDeltaPercent");
+const gameSensitivityInputEl = document.getElementById("gameSensitivityInput");
+const gameSensitivityValueEl = document.getElementById("gameSensitivityValue");
 const scalePrimaryInputEl = document.getElementById("scalePrimaryInput");
 const scaleSecondaryInputEl = document.getElementById("scaleSecondaryInput");
 const scaleLabelInputEl = document.getElementById("scaleLabelInput");
@@ -154,6 +163,16 @@ let reinforcementFeedbackEnabled = false;
 let popupGraphCanvas = null;
 let popupGraphContext = null;
 const popupGraphPoints = [];
+const GAME_SENSITIVITY_STORAGE_KEY = "gameSensitivityPercent:v1";
+const gameState = {
+  riderYPercent: 50,
+  smoothedVelocity: 0,
+  markerOffsetPx: 0,
+  markerSpacingPx: 90,
+  baselineWatts: null,
+  sensitivityPercent: 4,
+  lastUpdateMs: Date.now(),
+};
 
 connectBtn.addEventListener("click", connectPowerMeter);
 connectHrBtn.addEventListener("click", connectHeartRateMonitor);
@@ -187,8 +206,10 @@ renderInstantPhaseFeed();
 updatePowerBandTotalsUi();
 initializeTextScaling();
 initializeWidgetLayoutSystem();
+initializeGameTab();
 setInterval(updateRideProgressUi, 1000);
 setInterval(updatePopupGraph, 1000);
+setInterval(updateGameState, 100);
 
 function toggleReinforcementFeedback() {
   reinforcementFeedbackEnabled = !reinforcementFeedbackEnabled;
@@ -1327,16 +1348,18 @@ function drawPopupGraph(maxDurationSeconds = POPUP_GRAPH_MIN_DURATION_SECONDS) {
 }
 
 function switchView(viewName) {
-  const activeView = ["dashboard", "powerPhase", "settings"].includes(viewName)
+  const activeView = ["dashboard", "powerPhase", "game", "settings"].includes(viewName)
     ? viewName
     : "dashboard";
 
   const isDashboard = activeView === "dashboard";
   const isPowerPhase = activeView === "powerPhase";
+  const isGame = activeView === "game";
   const isSettings = activeView === "settings";
 
   dashboardViewEl?.classList.toggle("active", isDashboard);
   powerPhaseViewEl?.classList.toggle("active", isPowerPhase);
+  gameViewEl?.classList.toggle("active", isGame);
   settingsViewEl?.classList.toggle("active", isSettings);
 
   if (dashboardViewEl) {
@@ -1344,6 +1367,9 @@ function switchView(viewName) {
   }
   if (powerPhaseViewEl) {
     powerPhaseViewEl.hidden = !isPowerPhase;
+  }
+  if (gameViewEl) {
+    gameViewEl.hidden = !isGame;
   }
   if (settingsViewEl) {
     settingsViewEl.hidden = !isSettings;
@@ -1354,6 +1380,153 @@ function switchView(viewName) {
     tab.classList.toggle("active", isActive);
     tab.setAttribute("aria-current", isActive ? "page" : "false");
   });
+}
+
+
+
+function initializeGameTab() {
+  if (!gameSensitivityInputEl || !gameSceneEl) {
+    return;
+  }
+
+  const storedRaw = localStorage.getItem(GAME_SENSITIVITY_STORAGE_KEY);
+  const storedSensitivity = Number(storedRaw);
+  const initialSensitivity = Number.isFinite(storedSensitivity)
+    ? Math.min(12, Math.max(1, storedSensitivity))
+    : Number(gameSensitivityInputEl.value || 4);
+
+  gameState.sensitivityPercent = initialSensitivity;
+  gameSensitivityInputEl.value = String(initialSensitivity);
+  updateGameSensitivityLabel();
+
+  gameSensitivityInputEl.addEventListener("input", () => {
+    const parsed = Number(gameSensitivityInputEl.value);
+    gameState.sensitivityPercent = Number.isFinite(parsed) ? Math.min(12, Math.max(1, parsed)) : 4;
+    localStorage.setItem(GAME_SENSITIVITY_STORAGE_KEY, String(gameState.sensitivityPercent));
+    updateGameSensitivityLabel();
+  });
+
+  renderGameTrackMarkers();
+  window.addEventListener("resize", renderGameTrackMarkers);
+  updateGameHud();
+  renderGameRider();
+}
+
+function updateGameSensitivityLabel() {
+  if (!gameSensitivityValueEl) {
+    return;
+  }
+
+  gameSensitivityValueEl.textContent = `${formatNumber(gameState.sensitivityPercent, 1)}%`;
+}
+
+function updateGameState() {
+  if (!gameSceneEl) {
+    return;
+  }
+
+  const now = Date.now();
+  const elapsedMs = Math.max(16, now - (gameState.lastUpdateMs || now));
+  gameState.lastUpdateMs = now;
+
+  const baseline = getCurrentGameBaselineWatts();
+  gameState.baselineWatts = baseline;
+
+  const currentWatts = Number.isFinite(latestPowerWatts) ? latestPowerWatts : null;
+  let normalizedDelta = 0;
+
+  if (currentWatts != null && baseline != null && baseline > 0) {
+    const deltaRatio = (currentWatts - baseline) / baseline;
+    const sensitivityRatio = Math.max(gameState.sensitivityPercent / 100, 0.01);
+    normalizedDelta = Math.max(-1, Math.min(1, deltaRatio / sensitivityRatio));
+  }
+
+  const targetVelocity = normalizedDelta * 0.95;
+  gameState.smoothedVelocity += (targetVelocity - gameState.smoothedVelocity) * 0.2;
+  const movementScale = elapsedMs / 16.67;
+  gameState.riderYPercent -= gameState.smoothedVelocity * 1.8 * movementScale;
+  gameState.riderYPercent = Math.min(94, Math.max(6, gameState.riderYPercent));
+
+  const scrollSpeedPx = 4 + Math.abs(gameState.smoothedVelocity) * 2.8;
+  gameState.markerOffsetPx = (gameState.markerOffsetPx + scrollSpeedPx * movementScale) % gameState.markerSpacingPx;
+
+  updateGameHud(currentWatts, baseline);
+  renderGameRider();
+  renderGameTrackMarkers();
+}
+
+function getCurrentGameBaselineWatts() {
+  if (rideState) {
+    const rideAvgHr = rideState.hrCount > 0 ? rideState.hrSum / rideState.hrCount : null;
+    const remainingKj = Math.max(rideState.targetKj - rideState.doneKj, 0);
+    const guidedWatts = computeSuggestedWattsForTargetHr(rideAvgHr, remainingKj);
+
+    if (Number.isFinite(guidedWatts) && guidedWatts > 0) {
+      return guidedWatts;
+    }
+  }
+
+  const now = Date.now();
+  const avg5mHr = getWindowAverageHeartRate(now, WINDOWS_IN_MS["5m"]);
+  const avg5mWatts = getWindowAveragePower(now, WINDOWS_IN_MS["5m"]);
+  const targetHr = getTargetHeartRate() ?? TARGET_RIDE_AVG_HEART_RATE;
+
+  if (!Number.isFinite(avg5mHr) || !Number.isFinite(avg5mWatts) || avg5mHr <= 0 || avg5mWatts <= 0 || !Number.isFinite(targetHr)) {
+    return null;
+  }
+
+  const estimated = (avg5mWatts / avg5mHr) * targetHr;
+  if (!Number.isFinite(estimated) || estimated <= 0) {
+    return null;
+  }
+
+  const upperBound = Math.max(avg5mWatts * 1.35, 80);
+  const lowerBound = Math.max(avg5mWatts * 0.65, 50);
+  return Math.min(upperBound, Math.max(lowerBound, estimated));
+}
+
+function updateGameHud(currentWatts = latestPowerWatts, baseline = gameState.baselineWatts) {
+  if (gameBaselineWattsEl) {
+    gameBaselineWattsEl.textContent = Number.isFinite(baseline) ? `${formatNumber(baseline, 2)} W` : "--";
+  }
+
+  if (gameCurrentWattsEl) {
+    gameCurrentWattsEl.textContent = Number.isFinite(currentWatts) ? `${formatNumber(currentWatts, 0)} W` : "--";
+  }
+
+  if (gameDeltaPercentEl) {
+    if (Number.isFinite(currentWatts) && Number.isFinite(baseline) && baseline > 0) {
+      const deltaPercent = ((currentWatts - baseline) / baseline) * 100;
+      gameDeltaPercentEl.textContent = `${deltaPercent >= 0 ? "+" : ""}${formatNumber(deltaPercent, 2)}%`;
+    } else {
+      gameDeltaPercentEl.textContent = "--";
+    }
+  }
+}
+
+function renderGameRider() {
+  if (!gameRiderEl) {
+    return;
+  }
+
+  gameRiderEl.style.top = `${formatNumber(gameState.riderYPercent, 2)}%`;
+}
+
+function renderGameTrackMarkers() {
+  if (!gameTrackMarkersEl || !gameSceneEl) {
+    return;
+  }
+
+  const sceneWidth = gameSceneEl.clientWidth;
+  const markerCount = Math.ceil(sceneWidth / gameState.markerSpacingPx) + 3;
+  const markers = [];
+
+  for (let index = 0; index < markerCount; index += 1) {
+    const xPos = index * gameState.markerSpacingPx - gameState.markerOffsetPx;
+    markers.push(`<span class="game-track-marker" style="left:${xPos}px"></span>`);
+  }
+
+  gameTrackMarkersEl.innerHTML = markers.join("");
 }
 
 function initializeTextScaling() {
