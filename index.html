@@ -231,6 +231,22 @@
       </section>
 
       <section id="settingsView" class="view-panel" aria-label="Display settings" hidden>
+        <section class="avg-card settings-card" aria-label="Reinforcement heart rate bounds">
+          <p class="avg-label">Reinforcement Heart Rate Bounds</p>
+          <p class="phase-description">Set explicit heart rate limits that control when reinforcement feedback flashes.</p>
+          <div class="settings-grid">
+            <label class="settings-row" for="reinforcementLowerBoundInput">
+              <span class="settings-label">Lower bound</span>
+              <input id="reinforcementLowerBoundInput" class="ride-input settings-number-input" type="number" min="1" step="1" value="128" />
+              <span class="settings-value">BPM</span>
+            </label>
+            <label class="settings-row" for="reinforcementUpperBoundInput">
+              <span class="settings-label">Upper bound</span>
+              <input id="reinforcementUpperBoundInput" class="ride-input settings-number-input" type="number" min="1" step="1" value="142" />
+              <span class="settings-value">BPM</span>
+            </label>
+          </div>
+        </section>
         <section class="avg-card settings-card" aria-label="Text scaling">
           <p class="avg-label">Text Scaling</p>
           <p class="phase-description">Tune each text category independently for readability.</p>
