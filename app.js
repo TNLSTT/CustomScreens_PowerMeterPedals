@@ -54,6 +54,8 @@ const breathsPerKjRideEl = document.getElementById("breathsPerKjRide");
 const rideAvgHrEl = document.getElementById("rideAvgHr");
 const rideHrAdherenceEl = document.getElementById("rideHrAdherence");
 const targetHrInputEl = document.getElementById("targetHrInput");
+const reinforcementLowerBoundInputEl = document.getElementById("reinforcementLowerBoundInput");
+const reinforcementUpperBoundInputEl = document.getElementById("reinforcementUpperBoundInput");
 const targetGuidanceLabelEl = document.getElementById("targetGuidanceLabel");
 const remainingWorkGuidanceEl = document.getElementById("remainingWorkGuidance");
 const targetGuidanceWattsEl = document.getElementById("targetGuidanceWatts");
@@ -167,6 +169,14 @@ targetHrInputEl?.addEventListener("input", () => {
   updateReinforcementFeedbackState();
 });
 
+reinforcementLowerBoundInputEl?.addEventListener("input", () => {
+  updateReinforcementFeedbackState();
+});
+
+reinforcementUpperBoundInputEl?.addEventListener("input", () => {
+  updateReinforcementFeedbackState();
+});
+
 navTabs.forEach((tab) => tab.addEventListener("click", () => switchView(tab.dataset.view)));
 switchView("dashboard");
 
@@ -197,21 +207,30 @@ function toggleReinforcementFeedback() {
 }
 
 function updateReinforcementFeedbackState() {
-  const targetHr = getTargetHeartRate();
-  const inPocket = isHeartRateInPocket(latestHeartRateBpm, targetHr);
+  const bounds = getReinforcementHeartRateBounds();
+  const inPocket = isHeartRateInPocket(latestHeartRateBpm, bounds);
   const shouldFlash = reinforcementFeedbackEnabled && inPocket === false;
 
   document.body.classList.toggle("reinforcement-out-of-pocket", shouldFlash);
 }
 
-function isHeartRateInPocket(currentHeartRate, targetHeartRate) {
-  if (!Number.isFinite(currentHeartRate) || !Number.isFinite(targetHeartRate) || targetHeartRate <= 0) {
+function getReinforcementHeartRateBounds() {
+  const lowerBound = Number(reinforcementLowerBoundInputEl?.value);
+  const upperBound = Number(reinforcementUpperBoundInputEl?.value);
+
+  if (!Number.isFinite(lowerBound) || !Number.isFinite(upperBound) || lowerBound <= 0 || upperBound <= 0 || lowerBound > upperBound) {
     return null;
   }
 
-  const lowerBound = targetHeartRate * 0.95;
-  const upperBound = targetHeartRate * 1.05;
-  return currentHeartRate >= lowerBound && currentHeartRate <= upperBound;
+  return { lowerBound, upperBound };
+}
+
+function isHeartRateInPocket(currentHeartRate, bounds) {
+  if (!Number.isFinite(currentHeartRate) || !bounds) {
+    return null;
+  }
+
+  return currentHeartRate >= bounds.lowerBound && currentHeartRate <= bounds.upperBound;
 }
 
 async function connectPowerMeter() {

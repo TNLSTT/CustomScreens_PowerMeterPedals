@@ -621,6 +621,10 @@ body.reinforcement-out-of-pocket {
   accent-color: #22d3ee;
 }
 
+.settings-number-input {
+  width: 100%;
+}
+
 .settings-value {
   min-width: 4ch;
   text-align: right;
