@@ -754,3 +754,105 @@ body.reinforcement-out-of-pocket {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.5rem;
 }
+
+.game-card {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.game-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.game-stat {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(2, 6, 23, 0.45);
+}
+
+.game-sensitivity {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.game-sensitivity-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.game-scene {
+  position: relative;
+  min-height: clamp(220px, 32vh, 360px);
+  border-radius: 0.8rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.25) 0%, rgba(30, 64, 175, 0.16) 45%, rgba(15, 23, 42, 0.86) 100%);
+  overflow: hidden;
+}
+
+.game-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.game-layer-far {
+  background: radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.45) 0 2px, transparent 3px),
+    radial-gradient(circle at 62% 12%, rgba(255, 255, 255, 0.32) 0 3px, transparent 4px),
+    radial-gradient(circle at 85% 26%, rgba(255, 255, 255, 0.22) 0 2px, transparent 3px);
+  opacity: 0.5;
+}
+
+.game-layer-near {
+  background: linear-gradient(180deg, transparent 0%, transparent 70%, rgba(20, 83, 45, 0.25) 70%, rgba(20, 83, 45, 0.58) 100%);
+}
+
+.game-level-line {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  border-top: 1px dashed rgba(125, 211, 252, 0.7);
+}
+
+.game-track-markers {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 16px;
+  transform: translateY(-50%);
+}
+
+.game-track-marker {
+  position: absolute;
+  top: 7px;
+  width: 44px;
+  border-top: 2px solid rgba(148, 163, 184, 0.65);
+}
+
+.game-rider {
+  position: absolute;
+  left: 18%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(2rem, 4.2vw, 3rem);
+  filter: drop-shadow(0 5px 7px rgba(15, 23, 42, 0.65));
+  transition: top 80ms linear;
+}
+
+@media (max-width: 800px) {
+  .game-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .game-sensitivity-row {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+}

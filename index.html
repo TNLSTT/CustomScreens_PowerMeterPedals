@@ -12,6 +12,7 @@
         <nav class="top-nav" aria-label="View navigation">
           <button class="nav-tab active" data-view="dashboard" type="button">Main Dashboard</button>
           <button class="nav-tab" data-view="powerPhase" type="button">Power Phase Explorer</button>
+          <button class="nav-tab" data-view="game" type="button">Game</button>
           <button class="nav-tab" data-view="settings" type="button">Settings</button>
         </nav>
 
@@ -264,6 +265,33 @@
             <button id="toggleWidgetLayoutBtn" class="connect-btn" type="button">Enable Widget Edit Mode</button>
             <button id="resetWidgetLayoutBtn" class="connect-btn secondary" type="button">Reset Widget Layout</button>
             <button id="openPopupGraphBtn" class="connect-btn success" type="button">Create Popup Graph</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="gameView" class="view-panel" aria-label="Bicyclist auto runner game" hidden>
+        <section class="avg-card game-card">
+          <p class="avg-label">Bicyclist Flight Runner</p>
+          <p class="phase-description">Hold the rider level by matching the suggested watts for your target heart rate. Pedal slightly harder to rise and slightly easier to descend.</p>
+          <div class="game-stats-grid">
+            <div class="game-stat"><span class="avg-sub-label">Target-HR watts</span><span id="gameBaselineWatts" class="avg-sub-value">--</span></div>
+            <div class="game-stat"><span class="avg-sub-label">Current watts</span><span id="gameCurrentWatts" class="avg-sub-value">--</span></div>
+            <div class="game-stat"><span class="avg-sub-label">Delta</span><span id="gameDeltaPercent" class="avg-sub-value">--</span></div>
+            <label class="game-sensitivity" for="gameSensitivityInput">
+              <span class="avg-sub-label">Sensitivity (% watts for full up/down)</span>
+              <div class="game-sensitivity-row">
+                <input id="gameSensitivityInput" class="settings-slider" type="range" min="1" max="12" step="0.5" value="4" />
+                <span id="gameSensitivityValue" class="settings-value">4.0%</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="game-scene" id="gameScene" aria-label="Side scroller game scene">
+            <div class="game-layer game-layer-far"></div>
+            <div class="game-layer game-layer-near"></div>
+            <div class="game-track-markers" id="gameTrackMarkers"></div>
+            <div id="gameRider" class="game-rider" role="img" aria-label="Flying bicyclist">🚴</div>
+            <div class="game-level-line" aria-hidden="true"></div>
           </div>
         </section>
       </section>
