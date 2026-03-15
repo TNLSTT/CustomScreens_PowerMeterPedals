@@ -44,7 +44,8 @@ body {
   width: 100vw;
   min-height: 100vh;
   display: grid;
-  align-content: start;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: stretch;
   gap: clamp(0.35rem, 0.8vh, 0.75rem);
   padding: clamp(0.65rem, 1.7vh, 1.25rem) clamp(0.8rem, 2.1vw, 1.5rem);
   background: rgba(15, 23, 42, 0.72);
@@ -472,6 +473,7 @@ body.reinforcement-out-of-pocket {
 
 .view-panel {
   display: none;
+  min-height: 0;
   gap: clamp(0.35rem, 0.8vh, 0.75rem);
 }
 
@@ -757,7 +759,12 @@ body.reinforcement-out-of-pocket {
 
 .game-card {
   display: grid;
+  grid-template-rows: auto auto 1fr;
   gap: 0.7rem;
+}
+
+#gameView.view-panel.active {
+  align-content: stretch;
 }
 
 .game-stats-grid {
@@ -791,6 +798,7 @@ body.reinforcement-out-of-pocket {
 
 .game-scene {
   position: relative;
+  height: 100%;
   min-height: clamp(220px, 32vh, 360px);
   border-radius: 0.8rem;
   border: 1px solid rgba(148, 163, 184, 0.35);
