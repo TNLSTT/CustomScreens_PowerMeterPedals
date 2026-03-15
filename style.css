@@ -85,7 +85,7 @@ body {
 .watts,
 .heart-rate {
   margin: 0.2rem 0 0;
-  font-size: clamp(3.7rem, 9.8vh, 8.1rem);
+  font-size: clamp(4.4rem, 12vh, 10rem);
   font-weight: 800;
   line-height: 0.92;
   color: #f8fafc;
