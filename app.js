@@ -567,7 +567,9 @@ function parseAssiomaPowerPhaseExtension(value, offset) {
     return null;
   }
 
-  for (let candidateOffset = offset; candidateOffset <= value.byteLength - minimumBlockBytes; candidateOffset += 2) {
+  // Some firmware revisions prepend odd-length metadata, so scan byte by byte
+  // instead of assuming 2-byte alignment.
+  for (let candidateOffset = offset; candidateOffset <= value.byteLength - minimumBlockBytes; candidateOffset += 1) {
     const rawAngles = [];
     for (let i = 0; i < 8; i += 1) {
       rawAngles.push(value.getUint16(candidateOffset + (i * 2), true));
@@ -593,23 +595,30 @@ function parsePowerPhaseAngleBlock(rawAngles) {
   const parsedAngles = rawAngles.map((raw) => parseRawPhaseAngle(raw, scale));
   const [leftStart, leftEnd, rightStart, rightEnd, leftPeakStart, leftPeakEnd, rightPeakStart, rightPeakEnd] = parsedAngles;
 
-  if (!isFiniteAngle(leftStart) || !isFiniteAngle(leftEnd) || !isFiniteAngle(rightStart) || !isFiniteAngle(rightEnd)) {
-    return null;
-  }
-
-  return {
-    left: {
+  const left = isFiniteAngle(leftStart) && isFiniteAngle(leftEnd)
+    ? {
       start: leftStart,
       end: leftEnd,
       peakStart: leftPeakStart,
       peakEnd: leftPeakEnd,
-    },
-    right: {
+    }
+    : null;
+  const right = isFiniteAngle(rightStart) && isFiniteAngle(rightEnd)
+    ? {
       start: rightStart,
       end: rightEnd,
       peakStart: rightPeakStart,
       peakEnd: rightPeakEnd,
-    },
+    }
+    : null;
+
+  if (!left && !right) {
+    return null;
+  }
+
+  return {
+    left,
+    right,
   };
 }
 
