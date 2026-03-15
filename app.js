@@ -80,10 +80,14 @@ const scalePrimaryInputEl = document.getElementById("scalePrimaryInput");
 const scaleSecondaryInputEl = document.getElementById("scaleSecondaryInput");
 const scaleLabelInputEl = document.getElementById("scaleLabelInput");
 const scaleUiInputEl = document.getElementById("scaleUiInput");
+const scaleTimeBucketsInputEl = document.getElementById("scaleTimeBucketsInput");
+const scalePowerBandBucketsInputEl = document.getElementById("scalePowerBandBucketsInput");
 const scalePrimaryValueEl = document.getElementById("scalePrimaryValue");
 const scaleSecondaryValueEl = document.getElementById("scaleSecondaryValue");
 const scaleLabelValueEl = document.getElementById("scaleLabelValue");
 const scaleUiValueEl = document.getElementById("scaleUiValue");
+const scaleTimeBucketsValueEl = document.getElementById("scaleTimeBucketsValue");
+const scalePowerBandBucketsValueEl = document.getElementById("scalePowerBandBucketsValue");
 const toggleWidgetLayoutBtnEl = document.getElementById("toggleWidgetLayoutBtn");
 const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
 const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
@@ -1358,6 +1362,8 @@ function initializeTextScaling() {
     secondary: [".avg-sub-value", ".status", ".ride-progress-details span", ".phase-metric-grid dd"],
     label: [".label", ".unit", ".avg-label", ".avg-sub-label", ".ride-label", ".phase-subtitle", ".phase-metric-grid dt", ".phase-description"],
     ui: [".nav-tab", ".connect-btn", ".ride-input", ".ride-input-unit", ".settings-label", ".settings-value"],
+    timeBuckets: [".rolling-averages .avg-sub-value", ".rolling-averages .avg-value"],
+    powerBandBuckets: [".power-band-row .avg-sub-value"],
   };
 
   const inputMap = {
@@ -1365,6 +1371,8 @@ function initializeTextScaling() {
     secondary: { input: scaleSecondaryInputEl, value: scaleSecondaryValueEl, varName: "--text-scale-secondary" },
     label: { input: scaleLabelInputEl, value: scaleLabelValueEl, varName: "--text-scale-label" },
     ui: { input: scaleUiInputEl, value: scaleUiValueEl, varName: "--text-scale-ui" },
+    timeBuckets: { input: scaleTimeBucketsInputEl, value: scaleTimeBucketsValueEl, varName: "--text-scale-time-buckets" },
+    powerBandBuckets: { input: scalePowerBandBucketsInputEl, value: scalePowerBandBucketsValueEl, varName: "--text-scale-power-band-buckets" },
   };
 
   Object.entries(selectorsByCategory).forEach(([category, selectors]) => {
@@ -1381,7 +1389,7 @@ function initializeTextScaling() {
 
     const storedRaw = localStorage.getItem(`textScale:${category}`);
     const stored = Number(storedRaw);
-    const initialPercent = Number.isFinite(stored) ? Math.min(170, Math.max(70, stored)) : Number(config.input.value || 100);
+    const initialPercent = Number.isFinite(stored) ? Math.min(260, Math.max(70, stored)) : Number(config.input.value || 100);
     config.input.value = String(initialPercent);
     applyTextScale(config.varName, initialPercent, config.value);
 
