@@ -10,6 +10,10 @@ const TARGET_RIDE_AVG_HEART_RATE = 135;
 const BREATHS_PER_BEAT_FACTOR = 0.26;
 const RIDE_START_MIN_WATTS = 100;
 const RIDE_START_REQUIRED_SECONDS = 3;
+const AUTO_NAVIGATE_CADENCE_THRESHOLD = 120;
+const AUTO_NAVIGATE_HOLD_MS = 2000;
+const AUTO_NAVIGATE_COOLDOWN_MS = 3000;
+const VIEW_ROTATION_ORDER = ["dashboard", "powerPhase", "game", "settings"];
 
 const connectBtn = document.getElementById("connectBtn");
 const connectHrBtn = document.getElementById("connectHrBtn");
@@ -162,6 +166,8 @@ let popupGraphWindow = null;
 let reinforcementFeedbackEnabled = false;
 let popupGraphCanvas = null;
 let popupGraphContext = null;
+let highCadenceStartedAtMs = null;
+let lastAutoNavigateAtMs = 0;
 const popupGraphPoints = [];
 const GAME_SENSITIVITY_STORAGE_KEY = "gameSensitivityPercent:v1";
 const gameState = {
@@ -500,11 +506,47 @@ function handlePowerNotification(event) {
     powerPhase: parsedPowerMeasurement.powerPhase,
   });
   accumulateRideEnergy(watts, now);
+  maybeAutoNavigateByCadence(now);
 
   maybeAddRollingSample();
   updateRollingAverages();
   updateRideProgressUi();
   updatePopupGraph();
+}
+
+function maybeAutoNavigateByCadence(nowMs) {
+  if (!Number.isFinite(latestCadenceRpm) || latestCadenceRpm < AUTO_NAVIGATE_CADENCE_THRESHOLD) {
+    highCadenceStartedAtMs = null;
+    return;
+  }
+
+  if (highCadenceStartedAtMs == null) {
+    highCadenceStartedAtMs = nowMs;
+    return;
+  }
+
+  const heldDurationMs = nowMs - highCadenceStartedAtMs;
+  const cooldownElapsedMs = nowMs - lastAutoNavigateAtMs;
+  if (heldDurationMs < AUTO_NAVIGATE_HOLD_MS || cooldownElapsedMs < AUTO_NAVIGATE_COOLDOWN_MS) {
+    return;
+  }
+
+  navigateToNextView();
+  lastAutoNavigateAtMs = nowMs;
+  highCadenceStartedAtMs = nowMs;
+}
+
+function navigateToNextView() {
+  const activeIndex = VIEW_ROTATION_ORDER.findIndex((viewName) => {
+    const tab = navTabs.find((entry) => entry.dataset.view === viewName);
+    return tab?.classList.contains("active");
+  });
+
+  const nextIndex = activeIndex >= 0
+    ? (activeIndex + 1) % VIEW_ROTATION_ORDER.length
+    : 0;
+
+  switchView(VIEW_ROTATION_ORDER[nextIndex]);
 }
 
 
