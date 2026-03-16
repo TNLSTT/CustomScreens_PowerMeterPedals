@@ -30,9 +30,6 @@
   font-size: calc(var(--text-scale-time-buckets, 1) * 1em) !important;
 }
 
-.text-scale-powerBandBuckets {
-  font-size: calc(var(--text-scale-power-band-buckets, 1) * 1em) !important;
-}
 
 body {
   margin: 0;
