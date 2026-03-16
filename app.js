@@ -101,6 +101,7 @@ const toggleWidgetLayoutBtnEl = document.getElementById("toggleWidgetLayoutBtn")
 const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
 const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
 const reportEfficiencyCheckboxEl = document.getElementById("reportEfficiencyCheckbox");
+const powerKjBucketsGridEl = document.getElementById("powerKjBucketsGrid");
 
 const WIDGET_LAYOUT_STORAGE_KEY = "widgetLayout:v1";
 const REPORT_EFFICIENCY_STORAGE_KEY = "reportEfficiencyEnabled:v1";
@@ -136,6 +137,13 @@ const PHASE_WINDOWS = {
 };
 const PHASE_MAX_WINDOW_MS = PHASE_WINDOWS["10m"];
 const INSTANT_PHASE_FEED_MAX_ROWS = 12;
+const POWER_KJ_BUCKET_MIN_WATTS = 180;
+const POWER_KJ_BUCKET_MAX_WATTS = 275;
+const POWER_KJ_BUCKET_WIDTH_WATTS = 3;
+const POWER_KJ_BUCKET_TARGET_TOTAL_KJ = 772;
+const POWER_KJ_TARGET_HUMP_CENTER_WATTS = 215;
+const POWER_KJ_TARGET_HUMP_SPREAD_WATTS = 20;
+const POWER_KJ_TARGET_HUMP_WEIGHT = 0.7;
 let powerDevice;
 let heartRateDevice;
 let powerCharacteristic;
@@ -156,6 +164,8 @@ let popupGraphContext = null;
 let highCadenceStartedAtMs = null;
 let lastAutoNavigateAtMs = 0;
 const popupGraphPoints = [];
+const powerKjBuckets = createPowerKjBuckets();
+let lastPowerBucketSampleTimestamp = null;
 const GAME_SENSITIVITY_STORAGE_KEY = "gameSensitivityPercent:v1";
 const GAME_BEST_SCORE_STORAGE_KEY = "gameBestScore:v1";
 const gameState = {
@@ -209,6 +219,7 @@ updateTargetGuidanceLabel();
 updateRideProgressUi();
 updatePowerPhaseExplorer();
 renderInstantPhaseFeed();
+renderPowerKjBuckets();
 initializeTextScaling();
 initializeReportSettings();
 initializeWidgetLayoutSystem();
@@ -378,6 +389,7 @@ function startRideRecording() {
   lastPowerSampleTimestamp = null;
   rideHeartRateSamples = [];
   popupGraphPoints.length = 0;
+  resetPowerKjBuckets();
 
   setStatus(`Ride armed for ${formatNumber(targetKj, 2)} kJ. Starts after ${RIDE_START_REQUIRED_SECONDS}s above ${RIDE_START_MIN_WATTS} W.`);
   updateStartButtonVisibility();
@@ -507,6 +519,7 @@ function handlePowerNotification(event) {
     powerPhase: parsedPowerMeasurement.powerPhase,
   });
   accumulateRideEnergy(watts, now);
+  accumulatePowerBucketEnergy(watts, now);
   maybeAutoNavigateByCadence(now);
 
   maybeAddRollingSample();
@@ -758,6 +771,136 @@ function accumulateRideEnergy(watts, timestamp) {
   const deltaKj = (watts * cappedElapsedSeconds) / 1000;
   rideState.doneKj += deltaKj;
   lastPowerSampleTimestamp = timestamp;
+}
+
+function createPowerKjBuckets() {
+  const buckets = [];
+  for (let bucketStart = POWER_KJ_BUCKET_MIN_WATTS; bucketStart <= POWER_KJ_BUCKET_MAX_WATTS; bucketStart += POWER_KJ_BUCKET_WIDTH_WATTS) {
+    const bucketEnd = Math.min(bucketStart + POWER_KJ_BUCKET_WIDTH_WATTS - 1, POWER_KJ_BUCKET_MAX_WATTS);
+    buckets.push({
+      index: buckets.length,
+      startWatts: bucketStart,
+      endWatts: bucketEnd,
+      targetKj: 0,
+      currentKj: 0,
+      rowEl: null,
+      valueEl: null,
+      fillEl: null,
+    });
+  }
+
+  // Baseline + centered hump creates even targets with extra weight around ~215W.
+  const baselineWeight = 1;
+  let totalWeight = 0;
+  for (const bucket of buckets) {
+    const midpoint = (bucket.startWatts + bucket.endWatts) / 2;
+    const distance = midpoint - POWER_KJ_TARGET_HUMP_CENTER_WATTS;
+    const gaussian = Math.exp(-(distance * distance) / (2 * POWER_KJ_TARGET_HUMP_SPREAD_WATTS ** 2));
+    bucket.targetWeight = baselineWeight + POWER_KJ_TARGET_HUMP_WEIGHT * gaussian;
+    totalWeight += bucket.targetWeight;
+  }
+
+  for (const bucket of buckets) {
+    bucket.targetKj = (bucket.targetWeight / totalWeight) * POWER_KJ_BUCKET_TARGET_TOTAL_KJ;
+  }
+
+  return buckets;
+}
+
+function resetPowerKjBuckets() {
+  for (const bucket of powerKjBuckets) {
+    bucket.currentKj = 0;
+  }
+  lastPowerBucketSampleTimestamp = null;
+  renderPowerKjBuckets();
+}
+
+function accumulatePowerBucketEnergy(watts, timestamp) {
+  if (!Number.isFinite(watts)) {
+    lastPowerBucketSampleTimestamp = timestamp;
+    return;
+  }
+
+  if (!Number.isFinite(lastPowerBucketSampleTimestamp)) {
+    lastPowerBucketSampleTimestamp = timestamp;
+    return;
+  }
+
+  const elapsedSeconds = Math.min(Math.max(0, (timestamp - lastPowerBucketSampleTimestamp) / 1000), 5);
+  lastPowerBucketSampleTimestamp = timestamp;
+
+  if (elapsedSeconds <= 0) {
+    return;
+  }
+
+  const matchedBucket = getPowerBucketForWatts(watts);
+  if (!matchedBucket) {
+    return;
+  }
+
+  matchedBucket.currentKj += (watts * elapsedSeconds) / 1000;
+  updatePowerKjBucketRow(matchedBucket);
+}
+
+function getPowerBucketForWatts(watts) {
+  if (!Number.isFinite(watts) || watts < POWER_KJ_BUCKET_MIN_WATTS || watts > POWER_KJ_BUCKET_MAX_WATTS) {
+    return null;
+  }
+
+  const bucketIndex = Math.floor((watts - POWER_KJ_BUCKET_MIN_WATTS) / POWER_KJ_BUCKET_WIDTH_WATTS);
+  return powerKjBuckets[bucketIndex] || null;
+}
+
+function renderPowerKjBuckets() {
+  if (!powerKjBucketsGridEl) {
+    return;
+  }
+
+  powerKjBucketsGridEl.innerHTML = "";
+  const fragment = document.createDocumentFragment();
+
+  for (const bucket of powerKjBuckets) {
+    const rowEl = document.createElement("article");
+    rowEl.className = "power-kj-bucket-row";
+    rowEl.setAttribute("role", "listitem");
+
+    const labelEl = document.createElement("p");
+    labelEl.className = "power-kj-bucket-label";
+    labelEl.textContent = `${bucket.startWatts}-${bucket.endWatts}W`;
+
+    const valueEl = document.createElement("p");
+    valueEl.className = "power-kj-bucket-value";
+
+    const trackEl = document.createElement("div");
+    trackEl.className = "power-kj-bucket-track";
+
+    const fillEl = document.createElement("div");
+    fillEl.className = "power-kj-bucket-fill";
+    trackEl.appendChild(fillEl);
+
+    rowEl.append(labelEl, valueEl, trackEl);
+    fragment.appendChild(rowEl);
+
+    bucket.rowEl = rowEl;
+    bucket.valueEl = valueEl;
+    bucket.fillEl = fillEl;
+    updatePowerKjBucketRow(bucket);
+  }
+
+  powerKjBucketsGridEl.appendChild(fragment);
+}
+
+function updatePowerKjBucketRow(bucket) {
+  if (!bucket?.rowEl || !bucket.valueEl || !bucket.fillEl) {
+    return;
+  }
+
+  const percent = bucket.targetKj > 0 ? Math.min((bucket.currentKj / bucket.targetKj) * 100, 100) : 0;
+  const isComplete = bucket.currentKj >= bucket.targetKj;
+
+  bucket.valueEl.textContent = `${formatNumber(bucket.currentKj, 1)} / ${formatNumber(bucket.targetKj, 1)} kJ`;
+  bucket.fillEl.style.width = `${percent}%`;
+  bucket.rowEl.classList.toggle("complete", isComplete);
 }
 
 function maybeStartRideFromPower(watts, timestamp) {
