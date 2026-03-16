@@ -92,11 +92,13 @@ const scaleSecondaryInputEl = document.getElementById("scaleSecondaryInput");
 const scaleLabelInputEl = document.getElementById("scaleLabelInput");
 const scaleUiInputEl = document.getElementById("scaleUiInput");
 const scaleTimeBucketsInputEl = document.getElementById("scaleTimeBucketsInput");
+const scaleKjBucketsInputEl = document.getElementById("scaleKjBucketsInput");
 const scalePrimaryValueEl = document.getElementById("scalePrimaryValue");
 const scaleSecondaryValueEl = document.getElementById("scaleSecondaryValue");
 const scaleLabelValueEl = document.getElementById("scaleLabelValue");
 const scaleUiValueEl = document.getElementById("scaleUiValue");
 const scaleTimeBucketsValueEl = document.getElementById("scaleTimeBucketsValue");
+const scaleKjBucketsValueEl = document.getElementById("scaleKjBucketsValue");
 const toggleWidgetLayoutBtnEl = document.getElementById("toggleWidgetLayoutBtn");
 const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
 const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
@@ -1821,6 +1823,7 @@ function initializeTextScaling() {
     label: [".label", ".unit", ".avg-label", ".avg-sub-label", ".ride-label", ".phase-subtitle", ".phase-metric-grid dt", ".phase-description"],
     ui: [".nav-tab", ".connect-btn", ".ride-input", ".ride-input-unit", ".settings-label", ".settings-value"],
     timeBuckets: [".rolling-averages .avg-sub-value", ".rolling-averages .avg-value"],
+    kjBuckets: [".power-kj-buckets-card", ".power-kj-bucket-label", ".power-kj-bucket-value", ".power-kj-buckets-subtitle"],
   };
 
   const inputMap = {
@@ -1829,6 +1832,7 @@ function initializeTextScaling() {
     label: { input: scaleLabelInputEl, value: scaleLabelValueEl, varName: "--text-scale-label" },
     ui: { input: scaleUiInputEl, value: scaleUiValueEl, varName: "--text-scale-ui" },
     timeBuckets: { input: scaleTimeBucketsInputEl, value: scaleTimeBucketsValueEl, varName: "--text-scale-time-buckets" },
+    kjBuckets: { input: scaleKjBucketsInputEl, value: scaleKjBucketsValueEl, varName: "--scale-kj-buckets" },
   };
 
   Object.entries(selectorsByCategory).forEach(([category, selectors]) => {

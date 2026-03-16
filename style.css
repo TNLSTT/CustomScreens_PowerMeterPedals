@@ -31,6 +31,11 @@
 }
 
 
+.text-scale-kjBuckets {
+  font-size: calc(var(--scale-kj-buckets, 1) * 1em) !important;
+}
+
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -193,7 +198,7 @@ body {
 
 .power-kj-buckets-subtitle {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: calc(0.74rem * var(--scale-kj-buckets, 1));
   color: #94a3b8;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -201,17 +206,17 @@ body {
 
 .power-kj-buckets-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.35rem;
+  grid-template-columns: repeat(auto-fit, minmax(calc(120px * var(--scale-kj-buckets, 1)), 1fr));
+  gap: calc(0.35rem * var(--scale-kj-buckets, 1));
 }
 
 .power-kj-bucket-row {
   border: 1px solid rgba(248, 113, 113, 0.35);
-  border-radius: 0.5rem;
+  border-radius: calc(0.5rem * var(--scale-kj-buckets, 1));
   background: rgba(2, 6, 23, 0.45);
-  padding: 0.3rem 0.4rem;
+  padding: calc(0.3rem * var(--scale-kj-buckets, 1)) calc(0.4rem * var(--scale-kj-buckets, 1));
   display: grid;
-  gap: 0.18rem;
+  gap: calc(0.18rem * var(--scale-kj-buckets, 1));
 }
 
 .power-kj-bucket-row.complete {
@@ -228,7 +233,7 @@ body {
 
 .power-kj-bucket-value {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: calc(0.72rem * var(--scale-kj-buckets, 1));
   color: #fda4af;
   font-variant-numeric: tabular-nums;
 }
@@ -239,7 +244,7 @@ body {
 
 .power-kj-bucket-track {
   width: 100%;
-  height: 6px;
+  height: calc(6px * var(--scale-kj-buckets, 1));
   border-radius: 999px;
   overflow: hidden;
   background: rgba(148, 163, 184, 0.2);
