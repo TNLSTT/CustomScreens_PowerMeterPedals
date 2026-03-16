@@ -64,6 +64,7 @@ const rideDoneEl = document.getElementById("rideDone");
 const rideRemainingEl = document.getElementById("rideRemaining");
 const rideEtaEl = document.getElementById("rideEta");
 const rideElapsedEl = document.getElementById("rideElapsed");
+const rideAvgWattsEl = document.getElementById("rideAvgWatts");
 const rideProgressFillEl = document.getElementById("rideProgressFill");
 const rideProgressTrackEl = rideProgressFillEl?.parentElement;
 const navTabs = Array.from(document.querySelectorAll(".nav-tab"));
@@ -380,6 +381,8 @@ function startRideRecording() {
     startThresholdSeconds: 0,
     lastAboveThresholdTimestamp: null,
     doneKj: 0,
+    joulesAccumulated: 0,
+    activeSeconds: 0,
     completed: false,
     totalBreaths: 0,
     hrSum: 0,
@@ -411,8 +414,11 @@ function calculateRideStats() {
   const elapsedSeconds = rideState.started && Number.isFinite(rideState.startTimestamp)
     ? Math.max(0, (Date.now() - rideState.startTimestamp) / 1000)
     : 0;
+  const averageWatts = rideState.activeSeconds > 0
+    ? (rideState.joulesAccumulated / rideState.activeSeconds)
+    : null;
 
-  return { doneKj, remainingKj, etaSeconds, percentComplete, elapsedSeconds };
+  return { doneKj, remainingKj, etaSeconds, percentComplete, elapsedSeconds, averageWatts };
 }
 
 function getWindowAveragePower(now, windowMs) {
@@ -452,6 +458,9 @@ function updateRideProgressUi() {
     if (rideElapsedEl) {
       rideElapsedEl.textContent = "Elapsed: --:--";
     }
+    if (rideAvgWattsEl) {
+      rideAvgWattsEl.textContent = "AVG W: --";
+    }
     rideProgressFillEl.style.width = "0%";
     rideProgressTrackEl?.setAttribute("aria-valuenow", "0");
     updateBreathingMetrics();
@@ -471,6 +480,11 @@ function updateRideProgressUi() {
   rideEtaEl.textContent = stats.remainingKj <= 0 ? "ETA: Completed" : `ETA: ${formatDuration(stats.etaSeconds)}`;
   if (rideElapsedEl) {
     rideElapsedEl.textContent = `Elapsed: ${formatElapsedDuration(stats.elapsedSeconds)}`;
+  }
+  if (rideAvgWattsEl) {
+    rideAvgWattsEl.textContent = stats.averageWatts == null
+      ? "AVG W: --"
+      : `AVG W: ${formatNumber(stats.averageWatts, 1)}`;
   }
   rideProgressFillEl.style.width = `${formatNumber(percent, 2)}%`;
   rideProgressTrackEl?.setAttribute("aria-valuenow", `${formatNumber(percent, 2)}`);
@@ -770,8 +784,12 @@ function accumulateRideEnergy(watts, timestamp) {
 
   const elapsedSeconds = Math.max(0, (timestamp - lastPowerSampleTimestamp) / 1000);
   const cappedElapsedSeconds = Math.min(elapsedSeconds, 5);
-  const deltaKj = (watts * cappedElapsedSeconds) / 1000;
+  const deltaSeconds = Math.max(0, cappedElapsedSeconds);
+  const deltaJoules = watts * deltaSeconds;
+  const deltaKj = deltaJoules / 1000;
   rideState.doneKj += deltaKj;
+  rideState.joulesAccumulated += deltaJoules;
+  rideState.activeSeconds += deltaSeconds;
   lastPowerSampleTimestamp = timestamp;
 }
 
