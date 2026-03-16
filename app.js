@@ -2617,6 +2617,10 @@ function buildEfficiencyReportCsv(currentRideState) {
       heartRateCount: 0,
       cadenceSum: 0,
       cadenceCount: 0,
+      breathsPerMinuteSum: 0,
+      breathsPerMinuteCount: 0,
+      firstTimestamp: null,
+      lastTimestamp: null,
     };
 
     if (Number.isFinite(sample.watts)) {
@@ -2634,24 +2638,82 @@ function buildEfficiencyReportCsv(currentRideState) {
       bucket.cadenceCount += 1;
     }
 
+    if (Number.isFinite(sample.breathsPerMinute)) {
+      bucket.breathsPerMinuteSum += sample.breathsPerMinute;
+      bucket.breathsPerMinuteCount += 1;
+    }
+
+    if (!Number.isFinite(bucket.firstTimestamp) || sample.timestamp < bucket.firstTimestamp) {
+      bucket.firstTimestamp = sample.timestamp;
+    }
+
+    if (!Number.isFinite(bucket.lastTimestamp) || sample.timestamp > bucket.lastTimestamp) {
+      bucket.lastTimestamp = sample.timestamp;
+    }
+
     minuteBuckets.set(minuteIndex, bucket);
   });
 
   const minutes = Array.from(minuteBuckets.keys()).sort((left, right) => left - right);
-  const lines = ["minute,avg_watts,avg_heart_rate,avg_cadence"];
+  const lines = ["minute,avg_watts,avg_heart_rate,avg_cadence,avg_breaths_per_min,breaths_per_kj,watts_per_breath,watts_per_heart_rate,heart_rate_per_breath,delta_watts_vs_prev_min,delta_heart_rate_vs_prev_min,delta_breaths_per_min_vs_prev_min"];
+  let previousMinuteAverages = null;
 
   minutes.forEach((minuteIndex) => {
     const bucket = minuteBuckets.get(minuteIndex);
     const avgWatts = bucket.wattsCount > 0 ? bucket.wattsSum / bucket.wattsCount : null;
     const avgHeartRate = bucket.heartRateCount > 0 ? bucket.heartRateSum / bucket.heartRateCount : null;
     const avgCadence = bucket.cadenceCount > 0 ? bucket.cadenceSum / bucket.cadenceCount : null;
+    const avgBreathsPerMinute = bucket.breathsPerMinuteCount > 0
+      ? bucket.breathsPerMinuteSum / bucket.breathsPerMinuteCount
+      : null;
+    const elapsedSeconds = Number.isFinite(bucket.firstTimestamp) && Number.isFinite(bucket.lastTimestamp)
+      ? Math.max(0, (bucket.lastTimestamp - bucket.firstTimestamp) / 1000)
+      : 0;
+    const minuteKj = Number.isFinite(avgWatts) && elapsedSeconds > 0 ? (avgWatts * elapsedSeconds) / 1000 : null;
+    const breathsPerKj = Number.isFinite(avgBreathsPerMinute) && Number.isFinite(minuteKj) && minuteKj > 0
+      ? (avgBreathsPerMinute * (elapsedSeconds / 60)) / minuteKj
+      : null;
+    const wattsPerBreath = Number.isFinite(avgWatts) && Number.isFinite(avgBreathsPerMinute) && avgBreathsPerMinute > 0
+      ? avgWatts / avgBreathsPerMinute
+      : null;
+    const wattsPerHeartRate = Number.isFinite(avgWatts) && Number.isFinite(avgHeartRate) && avgHeartRate > 0
+      ? avgWatts / avgHeartRate
+      : null;
+    const heartRatePerBreath = Number.isFinite(avgHeartRate) && Number.isFinite(avgBreathsPerMinute) && avgBreathsPerMinute > 0
+      ? avgHeartRate / avgBreathsPerMinute
+      : null;
+    const deltaWatts = previousMinuteAverages && Number.isFinite(avgWatts) && Number.isFinite(previousMinuteAverages.avgWatts)
+      ? avgWatts - previousMinuteAverages.avgWatts
+      : null;
+    const deltaHeartRate = previousMinuteAverages && Number.isFinite(avgHeartRate) && Number.isFinite(previousMinuteAverages.avgHeartRate)
+      ? avgHeartRate - previousMinuteAverages.avgHeartRate
+      : null;
+    const deltaBreathsPerMinute = previousMinuteAverages
+      && Number.isFinite(avgBreathsPerMinute)
+      && Number.isFinite(previousMinuteAverages.avgBreathsPerMinute)
+      ? avgBreathsPerMinute - previousMinuteAverages.avgBreathsPerMinute
+      : null;
 
     lines.push([
       minuteIndex + 1,
       Number.isFinite(avgWatts) ? Number(avgWatts).toFixed(2) : "",
       Number.isFinite(avgHeartRate) ? Number(avgHeartRate).toFixed(2) : "",
       Number.isFinite(avgCadence) ? Number(avgCadence).toFixed(2) : "",
+      Number.isFinite(avgBreathsPerMinute) ? Number(avgBreathsPerMinute).toFixed(2) : "",
+      Number.isFinite(breathsPerKj) ? Number(breathsPerKj).toFixed(2) : "",
+      Number.isFinite(wattsPerBreath) ? Number(wattsPerBreath).toFixed(2) : "",
+      Number.isFinite(wattsPerHeartRate) ? Number(wattsPerHeartRate).toFixed(2) : "",
+      Number.isFinite(heartRatePerBreath) ? Number(heartRatePerBreath).toFixed(2) : "",
+      Number.isFinite(deltaWatts) ? Number(deltaWatts).toFixed(2) : "",
+      Number.isFinite(deltaHeartRate) ? Number(deltaHeartRate).toFixed(2) : "",
+      Number.isFinite(deltaBreathsPerMinute) ? Number(deltaBreathsPerMinute).toFixed(2) : "",
     ].join(","));
+
+    previousMinuteAverages = {
+      avgWatts,
+      avgHeartRate,
+      avgBreathsPerMinute,
+    };
   });
 
   return lines.join("\n");
