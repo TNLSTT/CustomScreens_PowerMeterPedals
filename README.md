@@ -1,6 +1,6 @@
-# Assioma Live Power
+# Pedal Live Power
 
-A minimal Web Bluetooth dashboard that connects to a cycling power meter (such as Favero Assioma pedals) and displays live watts.
+A minimal Web Bluetooth dashboard that connects to a cycling power meter (such as Favero Assioma or Wahoo POWRLINK pedals) and displays live watts.
 
 It also shows rolling average power for the last **1**, **3**, **5**, **10**, and **20** minutes, plus rolling average heart rate and watts per heart rate over those same windows.
 
@@ -44,12 +44,12 @@ Then open:
 - Bluetooth must be enabled on your computer.
 - The page must be opened from `localhost` or HTTPS.
 
-## 4) How to connect Assioma pedals
+## 4) How to connect power meter pedals (Assioma / Wahoo POWRLINK)
 
 1. Wake up your pedals by rotating them.
 2. Ensure pedals are not connected to another app/device (bike computer, phone app, etc.).
-3. On the webpage, click **Connect Assioma Pedals**.
-4. In the Bluetooth picker, select your Assioma device.
+3. On the webpage, click **Connect Power Meter Pedals**.
+4. In the Bluetooth picker, select your Assioma or Wahoo POWRLINK pedal device.
 5. Once connected, live watts should update several times per second.
 
 ## 5) How to connect a heart rate monitor
