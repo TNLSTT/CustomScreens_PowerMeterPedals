@@ -103,6 +103,7 @@ const scaleKjBucketsValueEl = document.getElementById("scaleKjBucketsValue");
 const toggleWidgetLayoutBtnEl = document.getElementById("toggleWidgetLayoutBtn");
 const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
 const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
+const openTextScalingPopupBtnEl = document.getElementById("openTextScalingPopupBtn");
 const reportEfficiencyCheckboxEl = document.getElementById("reportEfficiencyCheckbox");
 const powerKjBucketsGridEl = document.getElementById("powerKjBucketsGrid");
 
@@ -164,6 +165,7 @@ let popupGraphWindow = null;
 let reinforcementFeedbackEnabled = false;
 let popupGraphCanvas = null;
 let popupGraphContext = null;
+let textScalingPopupWindow = null;
 let highCadenceStartedAtMs = null;
 let lastAutoNavigateAtMs = 0;
 const popupGraphPoints = [];
@@ -195,6 +197,7 @@ connectHrBtn.addEventListener("click", connectHeartRateMonitor);
 reinforcementFeedbackBtnEl?.addEventListener("click", toggleReinforcementFeedback);
 startRideBtn.addEventListener("click", startRideRecording);
 openPopupGraphBtnEl?.addEventListener("click", openPopupGraphWindow);
+openTextScalingPopupBtnEl?.addEventListener("click", openTextScalingPopupWindowHandler);
 reportEfficiencyCheckboxEl?.addEventListener("change", () => {
   localStorage.setItem(REPORT_EFFICIENCY_STORAGE_KEY, reportEfficiencyCheckboxEl.checked ? "1" : "0");
 });
@@ -1325,6 +1328,124 @@ setInterval(() => {
   rideState.totalBreaths += breathsPerMinute / 60;
 }, 1000);
 
+
+
+function openTextScalingPopupWindowHandler() {
+  if (textScalingPopupWindow && !textScalingPopupWindow.closed) {
+    textScalingPopupWindow.focus();
+    return;
+  }
+
+  const popupWidth = 600;
+  const popupHeight = 520;
+  const popupLeft = Math.max(0, window.screenX + 80);
+  const popupTop = Math.max(0, window.screenY + 60);
+  textScalingPopupWindow = window.open(
+    "",
+    "textScalingSettings",
+    `width=${popupWidth},height=${popupHeight},left=${popupLeft},top=${popupTop}`,
+  );
+
+  if (!textScalingPopupWindow) {
+    setStatus("Popup blocked. Allow popups to open text scaling settings.");
+    return;
+  }
+
+  const popupDocument = textScalingPopupWindow.document;
+  popupDocument.title = "Text Scaling Settings";
+  popupDocument.body.innerHTML = `
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #020617;
+        color: #e2e8f0;
+        font-family: Inter, Segoe UI, Roboto, sans-serif;
+        min-height: 100vh;
+      }
+      .popup-wrap {
+        padding: 1rem;
+        display: grid;
+        gap: 0.8rem;
+      }
+      .popup-title {
+        margin: 0;
+        font-size: 1rem;
+        letter-spacing: 0.03em;
+      }
+      .popup-hint {
+        margin: 0;
+        color: #94a3b8;
+        font-size: 0.82rem;
+      }
+      .popup-controls {
+        display: grid;
+        gap: 0.55rem;
+      }
+      .popup-controls .settings-row {
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 0.55rem;
+        padding: 0.5rem 0.65rem;
+        background: rgba(15, 23, 42, 0.7);
+      }
+    </style>
+    <div class="popup-wrap">
+      <p class="popup-title">Text Scaling</p>
+      <p class="popup-hint">These controls are linked to the main Settings tab in real time.</p>
+      <div id="popupTextScalingControls" class="popup-controls"></div>
+    </div>
+  `;
+
+  const sourceGrid = settingsViewEl?.querySelector('[aria-label="Text scaling"] .settings-grid');
+  const targetGrid = popupDocument.getElementById("popupTextScalingControls");
+  if (!sourceGrid || !targetGrid) {
+    return;
+  }
+
+  sourceGrid.querySelectorAll('.settings-row').forEach((rowEl) => {
+    const clone = rowEl.cloneNode(true);
+    const slider = clone.querySelector('input.settings-slider');
+    const valueEl = clone.querySelector('.settings-value');
+    const sourceSlider = rowEl.querySelector('input.settings-slider');
+    const sourceValueEl = rowEl.querySelector('.settings-value');
+
+    if (!slider || !sourceSlider) {
+      targetGrid.appendChild(clone);
+      return;
+    }
+
+    const sourceId = sourceSlider.id;
+    const popupId = `popup-${sourceId}`;
+    slider.id = popupId;
+    clone.setAttribute("for", popupId);
+    const labelSpan = clone.querySelector('.settings-label');
+    if (labelSpan) {
+      labelSpan.id = `${popupId}-label`;
+    }
+
+    slider.value = sourceSlider.value;
+    if (valueEl && sourceValueEl) {
+      valueEl.textContent = sourceValueEl.textContent;
+    }
+
+    slider.addEventListener('input', () => {
+      sourceSlider.value = slider.value;
+      sourceSlider.dispatchEvent(new Event('input', { bubbles: true }));
+      if (sourceValueEl && valueEl) {
+        valueEl.textContent = sourceValueEl.textContent;
+      }
+    });
+
+    sourceSlider.addEventListener('input', () => {
+      slider.value = sourceSlider.value;
+      if (sourceValueEl && valueEl) {
+        valueEl.textContent = sourceValueEl.textContent;
+      }
+    });
+
+    targetGrid.appendChild(clone);
+  });
+}
 
 function openPopupGraphWindow() {
   if (popupGraphWindow && !popupGraphWindow.closed) {
