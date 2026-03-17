@@ -225,10 +225,10 @@ body {
 
 .power-kj-bucket-label {
   margin: 0;
-  font-size: 0.74rem;
-  color: #cbd5e1;
-  letter-spacing: 0.04em;
-  font-weight: 600;
+  font-size: calc(0.98rem * var(--scale-kj-buckets, 1));
+  color: #e2e8f0;
+  letter-spacing: 0.03em;
+  font-weight: 700;
 }
 
 .power-kj-bucket-value {
@@ -851,6 +851,11 @@ body.reinforcement-out-of-pocket {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.5rem;
+}
+
+.settings-action-row-inline {
+  margin-top: 0.2rem;
+  margin-bottom: 0.3rem;
 }
 
 .game-card {
