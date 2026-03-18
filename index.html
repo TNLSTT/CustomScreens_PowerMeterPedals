@@ -71,19 +71,19 @@
             <section class="metric-block" aria-label="Current power">
               <p class="label">Current Power</p>
               <div id="watts" class="watts" aria-live="polite">--</div>
-              <p class="unit">watts</p>
+              <p class="unit">3s avg watts</p>
             </section>
 
             <section class="metric-block" aria-label="Current balance">
               <p class="label">Balance</p>
               <div id="balance" class="balance" aria-live="polite">--</div>
-              <p class="unit">%L / %R</p>
+              <p class="unit">3s avg %L / %R</p>
             </section>
 
             <section class="metric-block" aria-label="Current heart rate">
               <p class="label">Current Heart Rate</p>
               <div id="heartRate" class="heart-rate" aria-live="polite">--</div>
-              <p class="unit">bpm</p>
+              <p class="unit">3s avg bpm</p>
             </section>
           </div>
 
@@ -122,6 +122,7 @@
             <p id="avg1m" class="avg-value">--</p>
             <div class="metric-row"><p class="avg-sub-label">10S PV</p><p id="pv1m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">AVG HR</p><p id="hrAvg1m" class="avg-sub-value">--</p></div>
+            <div class="metric-row"><p class="avg-sub-label">L/R balance</p><p id="balanceAvg1m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">cadence</p><p id="cadAvg1m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">watts / bpm</p><p id="wpHr1m" class="avg-sub-value">--</p></div>
           </article>
@@ -130,6 +131,7 @@
             <p id="avg3m" class="avg-value">--</p>
             <div class="metric-row"><p class="avg-sub-label">10S PV</p><p id="pv3m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">AVG HR</p><p id="hrAvg3m" class="avg-sub-value">--</p></div>
+            <div class="metric-row"><p class="avg-sub-label">L/R balance</p><p id="balanceAvg3m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">cadence</p><p id="cadAvg3m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">watts / bpm</p><p id="wpHr3m" class="avg-sub-value">--</p></div>
           </article>
@@ -138,6 +140,7 @@
             <p id="avg5m" class="avg-value">--</p>
             <div class="metric-row"><p class="avg-sub-label">10S PV</p><p id="pv5m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">AVG HR</p><p id="hrAvg5m" class="avg-sub-value">--</p></div>
+            <div class="metric-row"><p class="avg-sub-label">L/R balance</p><p id="balanceAvg5m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">cadence</p><p id="cadAvg5m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">watts / bpm</p><p id="wpHr5m" class="avg-sub-value">--</p></div>
           </article>
@@ -146,6 +149,7 @@
             <p id="avg10m" class="avg-value">--</p>
             <div class="metric-row"><p class="avg-sub-label">10S PV</p><p id="pv10m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">AVG HR</p><p id="hrAvg10m" class="avg-sub-value">--</p></div>
+            <div class="metric-row"><p class="avg-sub-label">L/R balance</p><p id="balanceAvg10m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">cadence</p><p id="cadAvg10m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">watts / bpm</p><p id="wpHr10m" class="avg-sub-value">--</p></div>
           </article>
@@ -154,6 +158,7 @@
             <p id="avg20m" class="avg-value">--</p>
             <div class="metric-row"><p class="avg-sub-label">10S PV</p><p id="pv20m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">AVG HR</p><p id="hrAvg20m" class="avg-sub-value">--</p></div>
+            <div class="metric-row"><p class="avg-sub-label">L/R balance</p><p id="balanceAvg20m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">cadence</p><p id="cadAvg20m" class="avg-sub-value">--</p></div>
             <div class="metric-row"><p class="avg-sub-label">watts / bpm</p><p id="wpHr20m" class="avg-sub-value">--</p></div>
           </article>

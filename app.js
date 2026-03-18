@@ -46,6 +46,11 @@ const hrAvg3mEl = document.getElementById("hrAvg3m");
 const hrAvg5mEl = document.getElementById("hrAvg5m");
 const hrAvg10mEl = document.getElementById("hrAvg10m");
 const hrAvg20mEl = document.getElementById("hrAvg20m");
+const balanceAvg1mEl = document.getElementById("balanceAvg1m");
+const balanceAvg3mEl = document.getElementById("balanceAvg3m");
+const balanceAvg5mEl = document.getElementById("balanceAvg5m");
+const balanceAvg10mEl = document.getElementById("balanceAvg10m");
+const balanceAvg20mEl = document.getElementById("balanceAvg20m");
 const cadAvg1mEl = document.getElementById("cadAvg1m");
 const cadAvg3mEl = document.getElementById("cadAvg3m");
 const cadAvg5mEl = document.getElementById("cadAvg5m");
@@ -131,6 +136,7 @@ const widgetLayoutState = {
 };
 
 const rollingSamples = [];
+const primaryMetricSamples = [];
 const powerSamples = [];
 const phaseSamples = [];
 const instantPhaseFeedSamples = [];
@@ -165,6 +171,9 @@ let latestPowerWatts = null;
 let latestHeartRateBpm = null;
 let latestCadenceRpm = null;
 let latestBalancePercent = null;
+let lastDisplayedPowerWatts = null;
+let lastDisplayedHeartRateBpm = null;
+let lastDisplayedBalancePercent = null;
 let previousCrankData = null;
 let rideState = null;
 let lastPowerSampleTimestamp = null;
@@ -240,6 +249,7 @@ initializeTextScaling();
 initializeReportSettings();
 initializeWidgetLayoutSystem();
 initializeGameTab();
+updatePrimaryMetricDisplays();
 setInterval(updateRideProgressUi, 1000);
 setInterval(updatePopupGraph, 1000);
 setInterval(updateGameState, 100);
@@ -538,12 +548,10 @@ function handlePowerNotification(event) {
   const parsedPowerMeasurement = parsePowerMeasurementDetails(value, flags);
   latestCadenceRpm = parsedPowerMeasurement.cadence;
   latestBalancePercent = parsedPowerMeasurement.balancePercent;
-  wattsEl.textContent = formatNumber(watts, 2);
-  if (balanceEl) {
-    balanceEl.textContent = formatBalance(latestBalancePercent);
-  }
 
   const now = Date.now();
+  addPrimaryMetricSample(now);
+  updatePrimaryMetricDisplays(now);
   addPowerSample(watts, now);
   addPhaseSample({
     timestamp: now,
@@ -563,7 +571,7 @@ function handlePowerNotification(event) {
   accumulatePowerBucketEnergy(watts, now);
   maybeAutoNavigateByCadence(now);
 
-  maybeAddRollingSample();
+  maybeAddRollingSample(now);
   updateRollingAverages();
   updateRideProgressUi();
   updatePopupGraph();
@@ -1036,7 +1044,10 @@ function handleHeartRateNotification(event) {
   const heartRate = isHeartRate16Bit ? value.getUint16(1, true) : value.getUint8(1);
 
   latestHeartRateBpm = heartRate;
-  heartRateEl.textContent = formatNumber(heartRate, 2);
+
+  const now = Date.now();
+  addPrimaryMetricSample(now);
+  updatePrimaryMetricDisplays(now);
 
   if (rideState?.started) {
     const targetHr = getTargetHeartRate();
@@ -1048,18 +1059,17 @@ function handleHeartRateNotification(event) {
     }
   }
 
-  maybeAddRollingSample();
+  maybeAddRollingSample(now);
   updateRollingAverages();
   updateRideProgressUi();
   updateReinforcementFeedbackState();
 }
 
-function maybeAddRollingSample() {
-  if (latestPowerWatts == null || latestHeartRateBpm == null) {
+function maybeAddRollingSample(now = Date.now()) {
+  if (latestPowerWatts == null) {
     return;
   }
 
-  const now = Date.now();
   const sample = {
     watts: latestPowerWatts,
     heartRate: latestHeartRateBpm,
@@ -1085,21 +1095,56 @@ function pruneRollingSamples(now) {
   }
 }
 
+function addPrimaryMetricSample(timestamp = Date.now()) {
+  primaryMetricSamples.push({
+    timestamp,
+    watts: latestPowerWatts,
+    heartRate: latestHeartRateBpm,
+    balancePercent: latestBalancePercent,
+  });
+  prunePrimaryMetricSamples(timestamp);
+}
+
+function prunePrimaryMetricSamples(now) {
+  const oldestAllowed = now - 3000;
+  while (primaryMetricSamples.length > 0 && primaryMetricSamples[0].timestamp < oldestAllowed) {
+    primaryMetricSamples.shift();
+  }
+}
+
+function updatePrimaryMetricDisplays(now = Date.now()) {
+  prunePrimaryMetricSamples(now);
+  const windowSamples = primaryMetricSamples.filter((sample) => sample.timestamp >= now - 3000);
+  lastDisplayedPowerWatts = getAverageFromSamples(windowSamples, (sample) => sample.watts);
+  lastDisplayedHeartRateBpm = getAverageFromSamples(windowSamples, (sample) => sample.heartRate);
+  lastDisplayedBalancePercent = getAverageFromSamples(windowSamples, (sample) => sample.balancePercent);
+
+  if (wattsEl) {
+    wattsEl.textContent = formatNumber(lastDisplayedPowerWatts, 2);
+  }
+  if (heartRateEl) {
+    heartRateEl.textContent = formatNumber(lastDisplayedHeartRateBpm, 2);
+  }
+  if (balanceEl) {
+    balanceEl.textContent = formatBalance(lastDisplayedBalancePercent);
+  }
+}
+
 function updateRollingAverages() {
   const now = Date.now();
   pruneRollingSamples(now);
 
-  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, pv1mEl, hrAvg1mEl, cadAvg1mEl, wpHr1mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, pv3mEl, hrAvg3mEl, cadAvg3mEl, wpHr3mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, pv5mEl, hrAvg5mEl, cadAvg5mEl, wpHr5mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, pv10mEl, hrAvg10mEl, cadAvg10mEl, wpHr10mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, pv20mEl, hrAvg20mEl, cadAvg20mEl, wpHr20mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, pv1mEl, hrAvg1mEl, balanceAvg1mEl, cadAvg1mEl, wpHr1mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, pv3mEl, hrAvg3mEl, balanceAvg3mEl, cadAvg3mEl, wpHr3mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, pv5mEl, hrAvg5mEl, balanceAvg5mEl, cadAvg5mEl, wpHr5mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, pv10mEl, hrAvg10mEl, balanceAvg10mEl, cadAvg10mEl, wpHr10mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, pv20mEl, hrAvg20mEl, balanceAvg20mEl, cadAvg20mEl, wpHr20mEl);
   updateBreathingMetrics();
   updateGuidancePanel();
   updatePowerPhaseExplorer();
 }
 
-function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl, cadenceAvgEl, wpHrEl) {
+function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl, balanceAvgEl, cadenceAvgEl, wpHrEl) {
   const avgPower = getWindowAveragePower(now, windowMs);
   const startTime = now - windowMs;
   const samplesInWindow = rollingSamples.filter((sample) => sample.timestamp >= startTime);
@@ -1108,17 +1153,20 @@ function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl,
     powerEl.textContent = "--";
     variabilityEl.textContent = "--";
     heartRateAvgEl.textContent = "--";
+    balanceAvgEl.textContent = "--";
     cadenceAvgEl.textContent = "--";
     wpHrEl.textContent = "--";
     return;
   }
 
-  const totalHeartRate = samplesInWindow.reduce(
-    (sum, sample) => sum + sample.heartRate,
-    0,
-  );
-
-  const avgHeartRate = totalHeartRate / samplesInWindow.length;
+  const heartRateSamples = samplesInWindow.filter((sample) => Number.isFinite(sample.heartRate));
+  const avgHeartRate = heartRateSamples.length > 0
+    ? heartRateSamples.reduce((sum, sample) => sum + sample.heartRate, 0) / heartRateSamples.length
+    : null;
+  const balanceSamples = samplesInWindow.filter((sample) => Number.isFinite(sample.balancePercent));
+  const avgBalance = balanceSamples.length > 0
+    ? balanceSamples.reduce((sum, sample) => sum + sample.balancePercent, 0) / balanceSamples.length
+    : null;
   const cadenceSamples = samplesInWindow.filter((sample) => Number.isFinite(sample.cadence));
   const avgCadence = cadenceSamples.length > 0
     ? cadenceSamples.reduce((sum, sample) => sum + sample.cadence, 0) / cadenceSamples.length
@@ -1130,10 +1178,11 @@ function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl,
   variabilityEl.textContent = powerVariability == null ? "--" : `${formatNumber(powerVariability, 2)}%`;
 
 
-  heartRateAvgEl.textContent = formatNumber(avgHeartRate, 2);
+  heartRateAvgEl.textContent = avgHeartRate == null ? "--" : formatNumber(avgHeartRate, 2);
+  balanceAvgEl.textContent = formatBalance(avgBalance);
   cadenceAvgEl.textContent = avgCadence == null ? "--" : formatNumber(avgCadence, 2);
 
-  if (avgHeartRate <= 0) {
+  if (!Number.isFinite(avgHeartRate) || avgHeartRate <= 0) {
     wpHrEl.textContent = "--";
     return;
   }
@@ -2828,6 +2877,8 @@ function buildEfficiencyReportCsv(currentRideState) {
       heartRateCount: 0,
       cadenceSum: 0,
       cadenceCount: 0,
+      balanceSum: 0,
+      balanceCount: 0,
       breathsPerMinuteSum: 0,
       breathsPerMinuteCount: 0,
       firstTimestamp: null,
@@ -2849,6 +2900,11 @@ function buildEfficiencyReportCsv(currentRideState) {
       bucket.cadenceCount += 1;
     }
 
+    if (Number.isFinite(sample.balancePercent)) {
+      bucket.balanceSum += sample.balancePercent;
+      bucket.balanceCount += 1;
+    }
+
     if (Number.isFinite(sample.breathsPerMinute)) {
       bucket.breathsPerMinuteSum += sample.breathsPerMinute;
       bucket.breathsPerMinuteCount += 1;
@@ -2866,7 +2922,7 @@ function buildEfficiencyReportCsv(currentRideState) {
   });
 
   const minutes = Array.from(minuteBuckets.keys()).sort((left, right) => left - right);
-  const lines = ["minute,avg_watts,avg_heart_rate,avg_cadence,avg_breaths_per_min,breaths_per_kj,watts_per_breath,watts_per_heart_rate,heart_rate_per_breath,delta_watts_vs_prev_min,delta_heart_rate_vs_prev_min,delta_breaths_per_min_vs_prev_min"];
+  const lines = ["minute,avg_watts,avg_heart_rate,avg_left_balance,avg_right_balance,avg_cadence,avg_breaths_per_min,breaths_per_kj,watts_per_breath,watts_per_heart_rate,heart_rate_per_breath,delta_watts_vs_prev_min,delta_heart_rate_vs_prev_min,delta_breaths_per_min_vs_prev_min,delta_left_balance_vs_prev_min,delta_right_balance_vs_prev_min"];
   let previousMinuteAverages = null;
 
   minutes.forEach((minuteIndex) => {
@@ -2874,6 +2930,8 @@ function buildEfficiencyReportCsv(currentRideState) {
     const avgWatts = bucket.wattsCount > 0 ? bucket.wattsSum / bucket.wattsCount : null;
     const avgHeartRate = bucket.heartRateCount > 0 ? bucket.heartRateSum / bucket.heartRateCount : null;
     const avgCadence = bucket.cadenceCount > 0 ? bucket.cadenceSum / bucket.cadenceCount : null;
+    const avgLeftBalance = bucket.balanceCount > 0 ? bucket.balanceSum / bucket.balanceCount : null;
+    const avgRightBalance = Number.isFinite(avgLeftBalance) ? (100 - avgLeftBalance) : null;
     const avgBreathsPerMinute = bucket.breathsPerMinuteCount > 0
       ? bucket.breathsPerMinuteSum / bucket.breathsPerMinuteCount
       : null;
@@ -2904,11 +2962,19 @@ function buildEfficiencyReportCsv(currentRideState) {
       && Number.isFinite(previousMinuteAverages.avgBreathsPerMinute)
       ? avgBreathsPerMinute - previousMinuteAverages.avgBreathsPerMinute
       : null;
+    const deltaLeftBalance = previousMinuteAverages && Number.isFinite(avgLeftBalance) && Number.isFinite(previousMinuteAverages.avgLeftBalance)
+      ? avgLeftBalance - previousMinuteAverages.avgLeftBalance
+      : null;
+    const deltaRightBalance = previousMinuteAverages && Number.isFinite(avgRightBalance) && Number.isFinite(previousMinuteAverages.avgRightBalance)
+      ? avgRightBalance - previousMinuteAverages.avgRightBalance
+      : null;
 
     lines.push([
       minuteIndex + 1,
       Number.isFinite(avgWatts) ? Number(avgWatts).toFixed(2) : "",
       Number.isFinite(avgHeartRate) ? Number(avgHeartRate).toFixed(2) : "",
+      Number.isFinite(avgLeftBalance) ? Number(avgLeftBalance).toFixed(2) : "",
+      Number.isFinite(avgRightBalance) ? Number(avgRightBalance).toFixed(2) : "",
       Number.isFinite(avgCadence) ? Number(avgCadence).toFixed(2) : "",
       Number.isFinite(avgBreathsPerMinute) ? Number(avgBreathsPerMinute).toFixed(2) : "",
       Number.isFinite(breathsPerKj) ? Number(breathsPerKj).toFixed(2) : "",
@@ -2918,12 +2984,16 @@ function buildEfficiencyReportCsv(currentRideState) {
       Number.isFinite(deltaWatts) ? Number(deltaWatts).toFixed(2) : "",
       Number.isFinite(deltaHeartRate) ? Number(deltaHeartRate).toFixed(2) : "",
       Number.isFinite(deltaBreathsPerMinute) ? Number(deltaBreathsPerMinute).toFixed(2) : "",
+      Number.isFinite(deltaLeftBalance) ? Number(deltaLeftBalance).toFixed(2) : "",
+      Number.isFinite(deltaRightBalance) ? Number(deltaRightBalance).toFixed(2) : "",
     ].join(","));
 
     previousMinuteAverages = {
       avgWatts,
       avgHeartRate,
       avgBreathsPerMinute,
+      avgLeftBalance,
+      avgRightBalance,
     };
   });
 
