@@ -1,6 +1,13 @@
 const CYCLING_POWER_SERVICE = 0x1818;
 const CYCLING_POWER_MEASUREMENT_CHAR = 0x2a63;
-const POWER_METER_NAME_PREFIXES = ["ASSIOMA", "POWRLINK", "WAHOO"];
+const POWER_METER_NAME_PREFIXES = [
+  "ASSIOMA",
+  "Assioma",
+  "POWRLINK",
+  "POWERLINK",
+  "WAHOO",
+  "Wahoo",
+];
 
 const HEART_RATE_SERVICE = 0x180d;
 const HEART_RATE_MEASUREMENT_CHAR = 0x2a37;
@@ -289,10 +296,10 @@ async function connectPowerMeter() {
   try {
     const powerMeterFilters = [
       { services: [CYCLING_POWER_SERVICE] },
-      ...POWER_METER_NAME_PREFIXES.map((namePrefix) => ({
-        namePrefix,
-        services: [CYCLING_POWER_SERVICE],
-      })),
+      ...POWER_METER_NAME_PREFIXES.flatMap((namePrefix) => [
+        { namePrefix, services: [CYCLING_POWER_SERVICE] },
+        { namePrefix },
+      ]),
     ];
 
     powerDevice = await navigator.bluetooth.requestDevice({
