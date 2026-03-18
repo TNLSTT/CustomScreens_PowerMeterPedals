@@ -29,6 +29,7 @@ const reinforcementFeedbackBtnEl = document.getElementById("reinforcementFeedbac
 const buttonGridEl = document.querySelector(".button-grid");
 const wattsEl = document.getElementById("watts");
 const heartRateEl = document.getElementById("heartRate");
+const balanceEl = document.getElementById("balance");
 const statusEl = document.getElementById("status");
 const avg1mEl = document.getElementById("avg1m");
 const avg3mEl = document.getElementById("avg3m");
@@ -163,6 +164,7 @@ let heartRateCharacteristic;
 let latestPowerWatts = null;
 let latestHeartRateBpm = null;
 let latestCadenceRpm = null;
+let latestBalancePercent = null;
 let previousCrankData = null;
 let rideState = null;
 let lastPowerSampleTimestamp = null;
@@ -535,7 +537,11 @@ function handlePowerNotification(event) {
   latestPowerWatts = watts;
   const parsedPowerMeasurement = parsePowerMeasurementDetails(value, flags);
   latestCadenceRpm = parsedPowerMeasurement.cadence;
+  latestBalancePercent = parsedPowerMeasurement.balancePercent;
   wattsEl.textContent = formatNumber(watts, 2);
+  if (balanceEl) {
+    balanceEl.textContent = formatBalance(latestBalancePercent);
+  }
 
   const now = Date.now();
   addPowerSample(watts, now);
@@ -606,8 +612,24 @@ function parsePowerMeasurementDetails(value, flags) {
 
   return {
     cadence,
+    balancePercent: parsePedalBalanceFromPowerMeasurement(value, flags),
     powerPhase: parseAssiomaPowerPhaseExtension(value, offsetAfterStandardFields),
   };
+}
+
+function parsePedalBalanceFromPowerMeasurement(value, flags) {
+  const PEDAL_POWER_BALANCE_PRESENT_FLAG = 0x01;
+  if ((flags & PEDAL_POWER_BALANCE_PRESENT_FLAG) === 0 || value.byteLength < 5) {
+    return null;
+  }
+
+  const rawBalance = value.getUint8(4);
+  const leftPercent = rawBalance / 2;
+  if (!Number.isFinite(leftPercent) || leftPercent < 0 || leftPercent > 100) {
+    return null;
+  }
+
+  return leftPercent;
 }
 
 function parseCadenceFromPowerMeasurement(value, flags, crankDataOffset = getCrankDataOffset(flags)) {
@@ -824,7 +846,11 @@ function createPowerKjBuckets() {
       currentKj: 0,
       rowEl: null,
       valueEl: null,
+      efficiencyEl: null,
       fillEl: null,
+      heartRateSum: 0,
+      heartRateCount: 0,
+      isAccumulating: false,
     });
   }
 
@@ -849,12 +875,18 @@ function createPowerKjBuckets() {
 function resetPowerKjBuckets() {
   for (const bucket of powerKjBuckets) {
     bucket.currentKj = 0;
+    bucket.heartRateSum = 0;
+    bucket.heartRateCount = 0;
+    bucket.isAccumulating = false;
   }
   lastPowerBucketSampleTimestamp = null;
   renderPowerKjBuckets();
 }
 
 function accumulatePowerBucketEnergy(watts, timestamp) {
+  const matchedBucket = getPowerBucketForWatts(watts);
+  setAccumulatingPowerKjBucket(matchedBucket);
+
   if (!Number.isFinite(watts)) {
     lastPowerBucketSampleTimestamp = timestamp;
     return;
@@ -868,16 +900,15 @@ function accumulatePowerBucketEnergy(watts, timestamp) {
   const elapsedSeconds = Math.min(Math.max(0, (timestamp - lastPowerBucketSampleTimestamp) / 1000), 5);
   lastPowerBucketSampleTimestamp = timestamp;
 
-  if (elapsedSeconds <= 0) {
-    return;
-  }
-
-  const matchedBucket = getPowerBucketForWatts(watts);
-  if (!matchedBucket) {
+  if (elapsedSeconds <= 0 || !matchedBucket) {
     return;
   }
 
   matchedBucket.currentKj += (watts * elapsedSeconds) / 1000;
+  if (Number.isFinite(latestHeartRateBpm) && latestHeartRateBpm > 0) {
+    matchedBucket.heartRateSum += latestHeartRateBpm;
+    matchedBucket.heartRateCount += 1;
+  }
   updatePowerKjBucketRow(matchedBucket);
 }
 
@@ -888,6 +919,17 @@ function getPowerBucketForWatts(watts) {
 
   const bucketIndex = Math.floor((watts - POWER_KJ_BUCKET_MIN_WATTS) / POWER_KJ_BUCKET_WIDTH_WATTS);
   return powerKjBuckets[bucketIndex] || null;
+}
+
+function setAccumulatingPowerKjBucket(activeBucket) {
+  for (const bucket of powerKjBuckets) {
+    const shouldAccumulate = bucket === activeBucket;
+    if (bucket.isAccumulating === shouldAccumulate) {
+      continue;
+    }
+    bucket.isAccumulating = shouldAccumulate;
+    updatePowerKjBucketRow(bucket);
+  }
 }
 
 function renderPowerKjBuckets() {
@@ -910,6 +952,9 @@ function renderPowerKjBuckets() {
     const valueEl = document.createElement("p");
     valueEl.className = "power-kj-bucket-value";
 
+    const efficiencyEl = document.createElement("p");
+    efficiencyEl.className = "power-kj-bucket-efficiency";
+
     const trackEl = document.createElement("div");
     trackEl.className = "power-kj-bucket-track";
 
@@ -917,11 +962,12 @@ function renderPowerKjBuckets() {
     fillEl.className = "power-kj-bucket-fill";
     trackEl.appendChild(fillEl);
 
-    rowEl.append(labelEl, valueEl, trackEl);
+    rowEl.append(labelEl, valueEl, efficiencyEl, trackEl);
     fragment.appendChild(rowEl);
 
     bucket.rowEl = rowEl;
     bucket.valueEl = valueEl;
+    bucket.efficiencyEl = efficiencyEl;
     bucket.fillEl = fillEl;
     updatePowerKjBucketRow(bucket);
   }
@@ -930,16 +976,25 @@ function renderPowerKjBuckets() {
 }
 
 function updatePowerKjBucketRow(bucket) {
-  if (!bucket?.rowEl || !bucket.valueEl || !bucket.fillEl) {
+  if (!bucket?.rowEl || !bucket.valueEl || !bucket.efficiencyEl || !bucket.fillEl) {
     return;
   }
 
   const percent = bucket.targetKj > 0 ? Math.min((bucket.currentKj / bucket.targetKj) * 100, 100) : 0;
   const isComplete = bucket.currentKj >= bucket.targetKj;
+  const avgHeartRate = bucket.heartRateCount > 0 ? bucket.heartRateSum / bucket.heartRateCount : null;
+  const bucketWattsReference = (bucket.startWatts + bucket.endWatts) / 2;
+  const bucketEfficiency = Number.isFinite(avgHeartRate) && avgHeartRate > 0
+    ? bucketWattsReference / avgHeartRate
+    : null;
 
   bucket.valueEl.textContent = `${formatNumber(bucket.currentKj, 1)} / ${formatNumber(bucket.targetKj, 1)} kJ`;
+  bucket.efficiencyEl.textContent = bucketEfficiency == null
+    ? "Efficiency: --"
+    : `Efficiency: ${formatNumber(bucketEfficiency, 2)} W/BPM`;
   bucket.fillEl.style.width = `${percent}%`;
   bucket.rowEl.classList.toggle("complete", isComplete);
+  bucket.rowEl.classList.toggle("accumulating", Boolean(bucket.isAccumulating));
 }
 
 function maybeStartRideFromPower(watts, timestamp) {
@@ -1009,6 +1064,7 @@ function maybeAddRollingSample() {
     watts: latestPowerWatts,
     heartRate: latestHeartRateBpm,
     cadence: latestCadenceRpm,
+    balancePercent: latestBalancePercent,
     breathsPerMinute: estimateBreathsPerMinute(latestHeartRateBpm),
     timestamp: now,
   };
@@ -2893,4 +2949,13 @@ function triggerCsvDownload(fileName, csvContent) {
 
 function setStatus(message) {
   statusEl.textContent = message;
+}
+
+function formatBalance(leftPercent) {
+  if (!Number.isFinite(leftPercent)) {
+    return "--";
+  }
+
+  const rightPercent = 100 - leftPercent;
+  return `${formatNumber(leftPercent, 1)} / ${formatNumber(rightPercent, 1)}`;
 }
