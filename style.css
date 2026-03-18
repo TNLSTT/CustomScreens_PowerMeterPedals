@@ -94,10 +94,17 @@ body {
 }
 
 .watts,
-.balance,
 .heart-rate {
   margin: 0.2rem 0 0;
   font-size: clamp(4.4rem, 12vh, 10rem);
+  font-weight: 800;
+  line-height: 0.92;
+  color: #f8fafc;
+}
+
+.balance {
+  margin: 0.2rem 0 0;
+  font-size: clamp(3.6rem, 9.5vh, 7.8rem);
   font-weight: 800;
   line-height: 0.92;
   color: #f8fafc;
