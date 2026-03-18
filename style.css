@@ -81,7 +81,7 @@ body {
 
 .live-metrics {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(0.45rem, 1.1vw, 1rem);
 }
 
@@ -94,6 +94,7 @@ body {
 }
 
 .watts,
+.balance,
 .heart-rate {
   margin: 0.2rem 0 0;
   font-size: clamp(4.4rem, 12vh, 10rem);
@@ -223,6 +224,11 @@ body {
   border-color: rgba(52, 211, 153, 0.45);
 }
 
+.power-kj-bucket-row.accumulating {
+  border-color: rgba(251, 146, 60, 0.65);
+  background: rgba(249, 115, 22, 0.2);
+}
+
 .power-kj-bucket-label {
   margin: 0;
   font-size: calc(0.98rem * var(--scale-kj-buckets, 1));
@@ -236,6 +242,17 @@ body {
   font-size: calc(0.72rem * var(--scale-kj-buckets, 1));
   color: #fda4af;
   font-variant-numeric: tabular-nums;
+}
+
+.power-kj-bucket-efficiency {
+  margin: 0;
+  font-size: calc(0.68rem * var(--scale-kj-buckets, 1));
+  color: #7dd3fc;
+  font-variant-numeric: tabular-nums;
+}
+
+.power-kj-bucket-row.accumulating .power-kj-bucket-efficiency {
+  color: #fdba74;
 }
 
 .power-kj-bucket-row.complete .power-kj-bucket-value {
