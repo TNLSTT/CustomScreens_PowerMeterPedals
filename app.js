@@ -65,6 +65,7 @@ const breathsPerMinuteEl = document.getElementById("breathsPerMinute");
 const breathsPerKj3mEl = document.getElementById("breathsPerKj3m");
 const breathsPerKjRideEl = document.getElementById("breathsPerKjRide");
 const rideAvgHrEl = document.getElementById("rideAvgHr");
+const rideHeartRateWalkEl = document.getElementById("rideHeartRateWalk");
 const rideHrAdherenceEl = document.getElementById("rideHrAdherence");
 const targetHrInputEl = document.getElementById("targetHrInput");
 const reinforcementLowerBoundInputEl = document.getElementById("reinforcementLowerBoundInput");
@@ -415,10 +416,14 @@ function startRideRecording() {
     joulesAccumulated: 0,
     activeSeconds: 0,
     completed: false,
+    completionTimestamp: null,
     totalBreaths: 0,
     hrSum: 0,
     hrCount: 0,
     hrAbsErrorSum: 0,
+    heartRateWalk: 0,
+    heartRateWalkSamples: [],
+    lastHeartRateWalkSecond: null,
     efficiencySamples: [],
     reportsDownloaded: false,
   };
@@ -443,7 +448,9 @@ function calculateRideStats() {
   const etaSeconds = avg3mWatts > 0 ? Math.round((remainingKj * 1000) / avg3mWatts) : null;
   const percentComplete = (doneKj / rideState.targetKj) * 100;
   const elapsedSeconds = rideState.started && Number.isFinite(rideState.startTimestamp)
-    ? Math.max(0, (Date.now() - rideState.startTimestamp) / 1000)
+    ? Math.max(0, (((rideState.completed && Number.isFinite(rideState.completionTimestamp))
+      ? rideState.completionTimestamp
+      : Date.now()) - rideState.startTimestamp) / 1000)
     : 0;
   const averageWatts = rideState.activeSeconds > 0
     ? (rideState.joulesAccumulated / rideState.activeSeconds)
@@ -525,6 +532,7 @@ function updateRideProgressUi() {
 
   if (stats.remainingKj <= 0 && !rideState.completed) {
     rideState.completed = true;
+    rideState.completionTimestamp = Date.now();
     setStatus(`Ride target complete: ${formatNumber(rideState.targetKj, 2)} kJ done.`);
     maybeDownloadRideReports();
   }
@@ -540,6 +548,10 @@ function updateStartButtonVisibility() {
 }
 
 function handlePowerNotification(event) {
+  if (rideState?.completed) {
+    return;
+  }
+
   const value = event.target.value;
   const flags = value.getUint16(0, true);
   const watts = value.getInt16(2, true);
@@ -1038,6 +1050,10 @@ function maybeStartRideFromPower(watts, timestamp) {
 }
 
 function handleHeartRateNotification(event) {
+  if (rideState?.completed) {
+    return;
+  }
+
   const value = event.target.value;
   const flags = value.getUint8(0);
   const isHeartRate16Bit = (flags & 0x01) !== 0;
@@ -1232,6 +1248,35 @@ function recomputeRideHeartRateTotals() {
   );
 }
 
+function recordRideHeartRateWalkSample(timestamp, heartRate) {
+  if (!rideState?.started || rideState.completed || !Number.isFinite(rideState.startTimestamp)) {
+    return;
+  }
+
+  if (!Number.isFinite(heartRate) || heartRate <= 0) {
+    return;
+  }
+
+  const secondIndex = Math.max(0, Math.floor((timestamp - rideState.startTimestamp) / 1000));
+  if (rideState.lastHeartRateWalkSecond === secondIndex) {
+    return;
+  }
+
+  const previousHeartRate = rideState.heartRateWalkSamples.length > 0
+    ? rideState.heartRateWalkSamples[rideState.heartRateWalkSamples.length - 1].heartRate
+    : null;
+  const walkDelta = Number.isFinite(previousHeartRate) ? Math.abs(heartRate - previousHeartRate) : 0;
+
+  rideState.heartRateWalk += walkDelta;
+  rideState.lastHeartRateWalkSecond = secondIndex;
+  rideState.heartRateWalkSamples.push({
+    secondIndex,
+    minuteIndex: Math.floor(secondIndex / 60),
+    heartRate,
+    walkDelta,
+  });
+}
+
 function calculatePowerVariability(now, windowMs, avgPower) {
   if (!Number.isFinite(avgPower) || avgPower <= 0) {
     return null;
@@ -1326,6 +1371,9 @@ function updateGuidancePanel() {
   if (!rideState) {
     rideHrAdherenceEl.textContent = "--";
     rideAvgHrEl.textContent = "--";
+    if (rideHeartRateWalkEl) {
+      rideHeartRateWalkEl.textContent = "--";
+    }
     remainingWorkGuidanceEl.textContent = "--";
     targetGuidanceWattsEl.textContent = "--";
     return;
@@ -1340,6 +1388,9 @@ function updateGuidancePanel() {
     : null;
   rideHrAdherenceEl.textContent = rideAdherence == null ? "--" : `${formatNumber(rideAdherence, 2)}%`;
   rideAvgHrEl.textContent = rideAvgHr == null ? "--" : `${formatNumber(rideAvgHr, 2)} bpm`;
+  if (rideHeartRateWalkEl) {
+    rideHeartRateWalkEl.textContent = formatNumber(rideState.heartRateWalk || 0, 0);
+  }
   remainingWorkGuidanceEl.textContent = `${formatNumber(remainingKj, 2)} kJ`;
 
   const suggestion = computeSuggestedWattsForTargetHr(rideAvgHr, remainingKj);
@@ -1437,7 +1488,13 @@ function delay(ms) {
 }
 
 setInterval(() => {
-  if (!rideState || latestHeartRateBpm == null || latestPowerWatts == null) {
+  if (!rideState || rideState.completed) {
+    return;
+  }
+
+  recordRideHeartRateWalkSample(Date.now(), latestHeartRateBpm);
+
+  if (latestHeartRateBpm == null || latestPowerWatts == null) {
     return;
   }
 
@@ -2922,7 +2979,8 @@ function buildEfficiencyReportCsv(currentRideState) {
   });
 
   const minutes = Array.from(minuteBuckets.keys()).sort((left, right) => left - right);
-  const lines = ["minute,avg_watts,avg_heart_rate,avg_left_balance,avg_right_balance,avg_cadence,avg_breaths_per_min,breaths_per_kj,watts_per_breath,watts_per_heart_rate,heart_rate_per_breath,delta_watts_vs_prev_min,delta_heart_rate_vs_prev_min,delta_breaths_per_min_vs_prev_min,delta_left_balance_vs_prev_min,delta_right_balance_vs_prev_min"];
+  const heartRateWalkSamples = currentRideState.heartRateWalkSamples || [];
+  const lines = ["minute,avg_watts,avg_heart_rate,avg_left_balance,avg_right_balance,avg_cadence,avg_breaths_per_min,breaths_per_kj,watts_per_breath,watts_per_heart_rate,heart_rate_per_breath,heart_rate_walk_in_minute,cumulative_heart_rate_walk,delta_watts_vs_prev_min,delta_heart_rate_vs_prev_min,delta_breaths_per_min_vs_prev_min,delta_left_balance_vs_prev_min,delta_right_balance_vs_prev_min"];
   let previousMinuteAverages = null;
 
   minutes.forEach((minuteIndex) => {
@@ -2951,6 +3009,12 @@ function buildEfficiencyReportCsv(currentRideState) {
     const heartRatePerBreath = Number.isFinite(avgHeartRate) && Number.isFinite(avgBreathsPerMinute) && avgBreathsPerMinute > 0
       ? avgHeartRate / avgBreathsPerMinute
       : null;
+    const minuteHeartRateWalk = heartRateWalkSamples
+      .filter((sample) => sample.minuteIndex === minuteIndex)
+      .reduce((sum, sample) => sum + sample.walkDelta, 0);
+    const cumulativeHeartRateWalk = heartRateWalkSamples
+      .filter((sample) => sample.minuteIndex <= minuteIndex)
+      .reduce((sum, sample) => sum + sample.walkDelta, 0);
     const deltaWatts = previousMinuteAverages && Number.isFinite(avgWatts) && Number.isFinite(previousMinuteAverages.avgWatts)
       ? avgWatts - previousMinuteAverages.avgWatts
       : null;
@@ -2981,6 +3045,8 @@ function buildEfficiencyReportCsv(currentRideState) {
       Number.isFinite(wattsPerBreath) ? Number(wattsPerBreath).toFixed(2) : "",
       Number.isFinite(wattsPerHeartRate) ? Number(wattsPerHeartRate).toFixed(2) : "",
       Number.isFinite(heartRatePerBreath) ? Number(heartRatePerBreath).toFixed(2) : "",
+      Number.isFinite(minuteHeartRateWalk) ? Number(minuteHeartRateWalk).toFixed(0) : "",
+      Number.isFinite(cumulativeHeartRateWalk) ? Number(cumulativeHeartRateWalk).toFixed(0) : "",
       Number.isFinite(deltaWatts) ? Number(deltaWatts).toFixed(2) : "",
       Number.isFinite(deltaHeartRate) ? Number(deltaHeartRate).toFixed(2) : "",
       Number.isFinite(deltaBreathsPerMinute) ? Number(deltaBreathsPerMinute).toFixed(2) : "",
