@@ -190,6 +190,18 @@ body {
   text-align: right;
 }
 
+.guidance-control-row {
+  align-items: center;
+}
+
+.guidance-control-row .avg-sub-label {
+  margin-top: 0.3rem;
+}
+
+.guidance-control-row .inline-control-row {
+  margin-top: 0.3rem;
+}
+
 
 
 .power-kj-buckets-card {
