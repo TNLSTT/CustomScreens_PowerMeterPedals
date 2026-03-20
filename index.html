@@ -99,21 +99,18 @@
             </article>
             <article class="avg-card">
               <p id="targetGuidanceLabel" class="avg-label">135 BPM Guidance</p>
-              <label class="avg-sub-label" for="targetHrInput">Target HR</label>
-              <div class="ride-programming-row inline-control-row">
-                <input id="targetHrInput" class="ride-input" type="number" min="1" step="1" value="135" aria-label="Target heart rate" />
-                <span class="ride-input-unit">bpm</span>
+              <div class="metric-row guidance-control-row">
+                <label class="avg-sub-label" for="targetHrInput">Target HR</label>
+                <div class="ride-programming-row inline-control-row">
+                  <input id="targetHrInput" class="ride-input" type="number" min="1" step="1" value="135" aria-label="Target heart rate" />
+                  <span class="ride-input-unit">bpm</span>
+                </div>
               </div>
-              <p class="avg-sub-label">Ride HR adherence</p>
-              <p id="rideHrAdherence" class="avg-sub-value">--</p>
-              <p class="avg-sub-label">Current ride avg HR</p>
-              <p id="rideAvgHr" class="avg-sub-value">--</p>
-              <p class="avg-sub-label">Ride HRW</p>
-              <p id="rideHeartRateWalk" class="avg-sub-value">--</p>
-              <p class="avg-sub-label">Remaining work</p>
-              <p id="remainingWorkGuidance" class="avg-sub-value">--</p>
-              <p class="avg-sub-label">Suggested watts now</p>
-              <p id="targetGuidanceWatts" class="avg-sub-value">--</p>
+              <div class="metric-row"><p class="avg-sub-label">Ride HR adherence</p><p id="rideHrAdherence" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Current ride avg HR</p><p id="rideAvgHr" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Ride HRW</p><p id="rideHeartRateWalk" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Remaining work</p><p id="remainingWorkGuidance" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Suggested watts now</p><p id="targetGuidanceWatts" class="avg-sub-value">--</p></div>
             </article>
           </section>
         </section>
