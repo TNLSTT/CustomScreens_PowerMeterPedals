@@ -3064,6 +3064,16 @@ function renderCustomBucketEditor() {
     emptyEl.textContent = 'No custom buckets configured. The dashboard will use the default 3W buckets.';
     customBucketEditorEl.appendChild(emptyEl);
   } else {
+    const headingRowEl = document.createElement('div');
+    headingRowEl.className = 'custom-bucket-editor-header';
+    ['Bucket', 'From watts', 'To watts', 'Goal kJ', 'Live summary', ''].forEach((heading) => {
+      const cellEl = document.createElement('span');
+      cellEl.className = 'custom-bucket-editor-heading';
+      cellEl.textContent = heading;
+      headingRowEl.appendChild(cellEl);
+    });
+    customBucketEditorEl.appendChild(headingRowEl);
+
     const listEl = document.createElement('div');
     listEl.className = 'custom-bucket-editor-list';
 
@@ -3071,9 +3081,10 @@ function renderCustomBucketEditor() {
       const rowEl = document.createElement('div');
       rowEl.className = 'custom-bucket-editor-row';
       rowEl.append(
-        createCustomBucketNumberField(index, 'startWatts', 'Start watts', bucket.startWatts, 1, 1),
-        createCustomBucketNumberField(index, 'endWatts', 'End watts', bucket.endWatts, 1, 1),
-        createCustomBucketNumberField(index, 'targetKj', 'Target kJ', bucket.targetKj, 0.1, 0.1),
+        createCustomBucketIndex(index),
+        createCustomBucketNumberField(index, 'startWatts', 'From watts', bucket.startWatts, 1, 1, 'W', 'Lowest power included in this bucket'),
+        createCustomBucketNumberField(index, 'endWatts', 'To watts', bucket.endWatts, 1, 1, 'W', 'Highest power included in this bucket'),
+        createCustomBucketNumberField(index, 'targetKj', 'Goal kJ', bucket.targetKj, 0.1, 0.1, 'kJ', 'Energy target before this bucket is marked complete'),
         createCustomBucketSummary(index, bucket),
         createCustomBucketDeleteButton(index),
       );
@@ -3093,13 +3104,23 @@ function renderCustomBucketEditor() {
   }
 }
 
-function createCustomBucketNumberField(index, field, label, value, step, min) {
+function createCustomBucketIndex(index) {
+  const indexEl = document.createElement('div');
+  indexEl.className = 'custom-bucket-editor-index';
+  indexEl.textContent = `Bucket ${index + 1}`;
+  return indexEl;
+}
+
+function createCustomBucketNumberField(index, field, label, value, step, min, unit, hint) {
   const labelEl = document.createElement('label');
-  labelEl.className = 'settings-row';
+  labelEl.className = 'custom-bucket-input';
 
   const textEl = document.createElement('span');
-  textEl.className = 'settings-label';
+  textEl.className = 'custom-bucket-input-label';
   textEl.textContent = label;
+
+  const inputWrapEl = document.createElement('div');
+  inputWrapEl.className = 'custom-bucket-input-wrap';
 
   const inputEl = document.createElement('input');
   inputEl.className = 'ride-input settings-number-input';
@@ -3107,26 +3128,43 @@ function createCustomBucketNumberField(index, field, label, value, step, min) {
   inputEl.min = String(min);
   inputEl.step = String(step);
   inputEl.value = String(value);
+  inputEl.setAttribute('aria-label', `${label} for bucket ${index + 1}`);
+  if (hint) {
+    inputEl.title = hint;
+  }
   inputEl.addEventListener('input', () => updateCustomPowerKjBucketField(index, field, inputEl.value));
 
-  labelEl.append(textEl, inputEl);
+  const unitEl = document.createElement('span');
+  unitEl.className = 'custom-bucket-input-unit';
+  unitEl.textContent = unit;
+
+  const hintEl = document.createElement('span');
+  hintEl.className = 'custom-bucket-input-hint';
+  hintEl.textContent = hint;
+
+  inputWrapEl.append(inputEl, unitEl);
+  labelEl.append(textEl, inputWrapEl, hintEl);
   return labelEl;
 }
 
 function createCustomBucketSummary(index, bucket) {
   const summaryEl = document.createElement('div');
-  summaryEl.className = 'settings-row';
+  summaryEl.className = 'custom-bucket-summary';
 
   const labelEl = document.createElement('span');
-  labelEl.className = 'settings-label';
-  labelEl.textContent = 'Band summary';
+  labelEl.className = 'custom-bucket-input-label';
+  labelEl.textContent = 'Live summary';
 
   const valueEl = document.createElement('span');
-  valueEl.className = 'settings-value';
-  valueEl.textContent = `${bucket.startWatts}-${bucket.endWatts}W • ${formatNumber(bucket.targetKj, 1)} kJ`;
+  valueEl.className = 'custom-bucket-summary-value';
+  valueEl.textContent = `${bucket.startWatts}-${bucket.endWatts}W • ${formatNumber(bucket.targetKj, 1)} kJ goal`;
   valueEl.id = `customBucketSummary${index}`;
 
-  summaryEl.append(labelEl, valueEl);
+  const hintEl = document.createElement('span');
+  hintEl.className = 'custom-bucket-input-hint';
+  hintEl.textContent = 'This is what the bucket will represent on the dashboard.';
+
+  summaryEl.append(labelEl, valueEl, hintEl);
   return summaryEl;
 }
 
