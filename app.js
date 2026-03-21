@@ -21,7 +21,7 @@ const RIDE_START_REQUIRED_SECONDS = 3;
 const AUTO_NAVIGATE_CADENCE_THRESHOLD = 120;
 const AUTO_NAVIGATE_HOLD_MS = 2000;
 const AUTO_NAVIGATE_COOLDOWN_MS = 3000;
-const VIEW_ROTATION_ORDER = ["dashboard", "powerPhase", "game", "settings"];
+const VIEW_ROTATION_ORDER = ["dashboard", "powerPhase", "game", "settings", "climb"];
 
 const connectBtn = document.getElementById("connectBtn");
 const connectHrBtn = document.getElementById("connectHrBtn");
@@ -90,6 +90,25 @@ const phaseBaselineGridEl = document.getElementById("phaseBaselineGrid");
 const instantPhaseFeedEl = document.getElementById("instantPhaseFeed");
 const settingsViewEl = document.getElementById("settingsView");
 const gameViewEl = document.getElementById("gameView");
+const climbViewEl = document.getElementById("climbView");
+const climbRiderWeightInputEl = document.getElementById("climbRiderWeightInput");
+const climbPowerInputEl = document.getElementById("climbPowerInput");
+const climbBikeWeightInputEl = document.getElementById("climbBikeWeightInput");
+const climbCdaInputEl = document.getElementById("climbCdaInput");
+const climbCalculateBtnEl = document.getElementById("climbCalculateBtn");
+const climbExportBtnEl = document.getElementById("climbExportBtn");
+const climbPredictedTimeEl = document.getElementById("climbPredictedTime");
+const climbAverageSpeedEl = document.getElementById("climbAverageSpeed");
+const climbVamEl = document.getElementById("climbVam");
+const climbWkgEl = document.getElementById("climbWkg");
+const climbGravityBreakdownEl = document.getElementById("climbGravityBreakdown");
+const climbRollingBreakdownEl = document.getElementById("climbRollingBreakdown");
+const climbAeroBreakdownEl = document.getElementById("climbAeroBreakdown");
+const climbEffectiveCdaEl = document.getElementById("climbEffectiveCda");
+const climbCalibrationFactorEl = document.getElementById("climbCalibrationFactor");
+const climbPlusOneWEl = document.getElementById("climbPlusOneW");
+const climbMinusOneKgEl = document.getElementById("climbMinusOneKg");
+const climbJsonOutputEl = document.getElementById("climbJsonOutput");
 const gameSceneEl = document.getElementById("gameScene");
 const gameRiderEl = document.getElementById("gameRider");
 const gameTrackMarkersEl = document.getElementById("gameTrackMarkers");
@@ -193,6 +212,26 @@ const powerKjBuckets = createPowerKjBuckets();
 let lastPowerBucketSampleTimestamp = null;
 const GAME_SENSITIVITY_STORAGE_KEY = "gameSensitivityPercent:v1";
 const GAME_BEST_SCORE_STORAGE_KEY = "gameBestScore:v1";
+const DOI_SUTHEP_MODEL = {
+  distanceMeters: 10800,
+  elevationGainMeters: 622,
+  averageGrade: 0.058,
+  crr: 0.004,
+  rho: 1.1,
+  g: 9.81,
+  drivetrainEfficiency: 0.97,
+  defaultBikeWeightKg: 8,
+  reference: {
+    riderWeightKg: 71.8,
+    bikeWeightKg: 8,
+    powerWatts: 283,
+    timeSeconds: 2213,
+  },
+};
+
+let climbModelCalibration = null;
+let lastClimbCalculation = null;
+
 const gameState = {
   riderYPercent: 50,
   smoothedVelocity: 0,
@@ -250,6 +289,7 @@ initializeTextScaling();
 initializeReportSettings();
 initializeWidgetLayoutSystem();
 initializeGameTab();
+initializeClimbCalculator();
 updatePrimaryMetricDisplays();
 setInterval(updateRideProgressUi, 1000);
 setInterval(updatePopupGraph, 1000);
@@ -1816,7 +1856,7 @@ function drawPopupGraph(maxDurationSeconds = POPUP_GRAPH_MIN_DURATION_SECONDS) {
 }
 
 function switchView(viewName) {
-  const activeView = ["dashboard", "powerPhase", "game", "settings"].includes(viewName)
+  const activeView = ["dashboard", "powerPhase", "game", "settings", "climb"].includes(viewName)
     ? viewName
     : "dashboard";
 
@@ -1824,11 +1864,13 @@ function switchView(viewName) {
   const isPowerPhase = activeView === "powerPhase";
   const isGame = activeView === "game";
   const isSettings = activeView === "settings";
+  const isClimb = activeView === "climb";
 
   dashboardViewEl?.classList.toggle("active", isDashboard);
   powerPhaseViewEl?.classList.toggle("active", isPowerPhase);
   gameViewEl?.classList.toggle("active", isGame);
   settingsViewEl?.classList.toggle("active", isSettings);
+  climbViewEl?.classList.toggle("active", isClimb);
 
   if (dashboardViewEl) {
     dashboardViewEl.hidden = !isDashboard;
@@ -1841,6 +1883,9 @@ function switchView(viewName) {
   }
   if (settingsViewEl) {
     settingsViewEl.hidden = !isSettings;
+  }
+  if (climbViewEl) {
+    climbViewEl.hidden = !isClimb;
   }
 
   navTabs.forEach((tab) => {
@@ -3064,6 +3109,202 @@ function buildEfficiencyReportCsv(currentRideState) {
   });
 
   return lines.join("\n");
+}
+
+function initializeClimbCalculator() {
+  if (!climbRiderWeightInputEl || !climbPowerInputEl || !climbBikeWeightInputEl) {
+    return;
+  }
+
+  climbModelCalibration = calibrateDoiSuthepModel();
+
+  const inputEls = [climbRiderWeightInputEl, climbPowerInputEl, climbBikeWeightInputEl, climbCdaInputEl];
+  inputEls.forEach((inputEl) => {
+    inputEl?.addEventListener("input", calculateClimbPrediction);
+  });
+
+  climbCalculateBtnEl?.addEventListener("click", calculateClimbPrediction);
+  climbExportBtnEl?.addEventListener("click", exportClimbPredictionAsJson);
+
+  calculateClimbPrediction();
+}
+
+function calibrateDoiSuthepModel() {
+  const referenceSpeed = DOI_SUTHEP_MODEL.distanceMeters / DOI_SUTHEP_MODEL.reference.timeSeconds;
+  const totalMassKg = DOI_SUTHEP_MODEL.reference.riderWeightKg + DOI_SUTHEP_MODEL.reference.bikeWeightKg;
+  const wheelPowerWatts = DOI_SUTHEP_MODEL.reference.powerWatts * DOI_SUTHEP_MODEL.drivetrainEfficiency;
+  const gravityWatts = totalMassKg * DOI_SUTHEP_MODEL.g * DOI_SUTHEP_MODEL.averageGrade * referenceSpeed;
+  const rollingWatts = DOI_SUTHEP_MODEL.crr * totalMassKg * DOI_SUTHEP_MODEL.g * referenceSpeed;
+  const aeroResidualWatts = Math.max(wheelPowerWatts - gravityWatts - rollingWatts, 0);
+  const calibratedCda = aeroResidualWatts > 0
+    ? (2 * aeroResidualWatts) / (DOI_SUTHEP_MODEL.rho * Math.pow(referenceSpeed, 3))
+    : 0;
+  const baselineCda = 0.32;
+
+  return {
+    referenceSpeed,
+    wheelPowerWatts,
+    gravityWatts,
+    rollingWatts,
+    aeroResidualWatts,
+    calibratedCda,
+    correctionFactor: baselineCda > 0 ? calibratedCda / baselineCda : 1,
+  };
+}
+
+function calculateClimbPrediction() {
+  const riderWeightKg = Number(climbRiderWeightInputEl?.value);
+  const powerWatts = Number(climbPowerInputEl?.value);
+  const bikeWeightKg = Number(climbBikeWeightInputEl?.value) || DOI_SUTHEP_MODEL.defaultBikeWeightKg;
+  const cdaOverride = climbCdaInputEl?.value ? Number(climbCdaInputEl.value) : null;
+
+  if (!Number.isFinite(riderWeightKg) || !Number.isFinite(powerWatts) || riderWeightKg <= 0 || powerWatts <= 0 || bikeWeightKg <= 0) {
+    return;
+  }
+
+  const result = solveDoiSuthepClimb({ riderWeightKg, powerWatts, bikeWeightKg, cdaOverride });
+  lastClimbCalculation = result;
+  renderClimbCalculation(result);
+}
+
+function solveDoiSuthepClimb({ riderWeightKg, powerWatts, bikeWeightKg = DOI_SUTHEP_MODEL.defaultBikeWeightKg, cdaOverride = null }) {
+  const totalMassKg = riderWeightKg + bikeWeightKg;
+  const effectiveCda = Number.isFinite(cdaOverride) && cdaOverride > 0 ? cdaOverride : climbModelCalibration.calibratedCda;
+  const wheelPowerWatts = powerWatts * DOI_SUTHEP_MODEL.drivetrainEfficiency;
+  const speedMetersPerSecond = solveVelocityFromPower({ totalMassKg, wheelPowerWatts, effectiveCda });
+  const timeSeconds = DOI_SUTHEP_MODEL.distanceMeters / speedMetersPerSecond;
+  const gravityWatts = totalMassKg * DOI_SUTHEP_MODEL.g * DOI_SUTHEP_MODEL.averageGrade * speedMetersPerSecond;
+  const rollingWatts = DOI_SUTHEP_MODEL.crr * totalMassKg * DOI_SUTHEP_MODEL.g * speedMetersPerSecond;
+  const aeroWatts = 0.5 * DOI_SUTHEP_MODEL.rho * effectiveCda * Math.pow(speedMetersPerSecond, 3);
+  const vam = (DOI_SUTHEP_MODEL.elevationGainMeters / timeSeconds) * 3600;
+  const averageSpeedKph = speedMetersPerSecond * 3.6;
+  const wkg = powerWatts / riderWeightKg;
+  const predictedPlusOneW = solveDoiSuthepClimbDelta({ riderWeightKg, powerWatts: powerWatts + 1, bikeWeightKg, cdaOverride: effectiveCda });
+  const predictedMinusOneKg = solveDoiSuthepClimbDelta({ riderWeightKg: Math.max(35, riderWeightKg - 1), powerWatts, bikeWeightKg, cdaOverride: effectiveCda });
+
+  return {
+    inputs: { riderWeightKg, powerWatts, bikeWeightKg, cdaOverride: Number.isFinite(cdaOverride) ? cdaOverride : null },
+    calibration: {
+      effectiveCda,
+      referenceCalibratedCda: climbModelCalibration.calibratedCda,
+      calibrationFactor: climbModelCalibration.correctionFactor,
+      referenceAeroResidualWatts: climbModelCalibration.aeroResidualWatts,
+    },
+    outputs: {
+      timeSeconds,
+      averageSpeedKph,
+      vam,
+      wkg,
+      wheelPowerWatts,
+      speedMetersPerSecond,
+    },
+    breakdown: {
+      gravityWatts,
+      rollingWatts,
+      aeroWatts,
+      gravityPercent: (gravityWatts / wheelPowerWatts) * 100,
+      rollingPercent: (rollingWatts / wheelPowerWatts) * 100,
+      aeroPercent: (aeroWatts / wheelPowerWatts) * 100,
+    },
+    sensitivity: {
+      secondsPerPlusOneW: predictedPlusOneW.timeSeconds - timeSeconds,
+      secondsPerMinusOneKg: predictedMinusOneKg.timeSeconds - timeSeconds,
+    },
+  };
+}
+
+function solveDoiSuthepClimbDelta(params) {
+  const totalMassKg = params.riderWeightKg + params.bikeWeightKg;
+  const effectiveCda = Number.isFinite(params.cdaOverride) && params.cdaOverride > 0 ? params.cdaOverride : climbModelCalibration.calibratedCda;
+  const wheelPowerWatts = params.powerWatts * DOI_SUTHEP_MODEL.drivetrainEfficiency;
+  const speedMetersPerSecond = solveVelocityFromPower({ totalMassKg, wheelPowerWatts, effectiveCda });
+  return { timeSeconds: DOI_SUTHEP_MODEL.distanceMeters / speedMetersPerSecond };
+}
+
+function solveVelocityFromPower({ totalMassKg, wheelPowerWatts, effectiveCda }) {
+  let low = 0.5;
+  let high = 12;
+
+  for (let index = 0; index < 80; index += 1) {
+    const mid = (low + high) / 2;
+    const modeledPower = computeModeledWheelPower({ totalMassKg, speedMetersPerSecond: mid, effectiveCda });
+    if (modeledPower > wheelPowerWatts) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+
+  return (low + high) / 2;
+}
+
+function computeModeledWheelPower({ totalMassKg, speedMetersPerSecond, effectiveCda }) {
+  const gravityWatts = totalMassKg * DOI_SUTHEP_MODEL.g * DOI_SUTHEP_MODEL.averageGrade * speedMetersPerSecond;
+  const rollingWatts = DOI_SUTHEP_MODEL.crr * totalMassKg * DOI_SUTHEP_MODEL.g * speedMetersPerSecond;
+  const aeroWatts = 0.5 * DOI_SUTHEP_MODEL.rho * effectiveCda * Math.pow(speedMetersPerSecond, 3);
+  return gravityWatts + rollingWatts + aeroWatts;
+}
+
+function renderClimbCalculation(result) {
+  if (!result) {
+    return;
+  }
+
+  climbPredictedTimeEl.textContent = formatDurationClock(result.outputs.timeSeconds);
+  climbAverageSpeedEl.textContent = `${formatNumber(result.outputs.averageSpeedKph, 2)} km/h`;
+  climbVamEl.textContent = `${formatNumber(result.outputs.vam, 0)} m/h`;
+  climbWkgEl.textContent = `${formatNumber(result.outputs.wkg, 2)} W/kg`;
+  climbGravityBreakdownEl.textContent = `${formatNumber(result.breakdown.gravityWatts, 1)} W (${formatNumber(result.breakdown.gravityPercent, 1)}%)`;
+  climbRollingBreakdownEl.textContent = `${formatNumber(result.breakdown.rollingWatts, 1)} W (${formatNumber(result.breakdown.rollingPercent, 1)}%)`;
+  climbAeroBreakdownEl.textContent = `${formatNumber(result.breakdown.aeroWatts, 1)} W (${formatNumber(result.breakdown.aeroPercent, 1)}%)`;
+  climbEffectiveCdaEl.textContent = `${formatNumber(result.calibration.effectiveCda, 3)} m²`;
+  climbCalibrationFactorEl.textContent = `${formatNumber(result.calibration.calibrationFactor, 3)}× vs 0.320 baseline`;
+  climbPlusOneWEl.textContent = `${formatSignedSeconds(result.sensitivity.secondsPerPlusOneW)} / +1W`;
+  climbMinusOneKgEl.textContent = `${formatSignedSeconds(result.sensitivity.secondsPerMinusOneKg)} / -1kg`;
+  climbJsonOutputEl.textContent = JSON.stringify(result, null, 2);
+}
+
+function exportClimbPredictionAsJson() {
+  if (!lastClimbCalculation) {
+    calculateClimbPrediction();
+  }
+
+  if (!lastClimbCalculation) {
+    return;
+  }
+
+  const jsonContent = JSON.stringify(lastClimbCalculation, null, 2);
+  const fileName = `doi-suthep-${Date.now()}.json`;
+  const jsonBlob = new Blob([jsonContent], { type: "application/json;charset=utf-8" });
+  const downloadUrl = URL.createObjectURL(jsonBlob);
+  const link = document.createElement("a");
+  link.href = downloadUrl;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(downloadUrl);
+}
+
+function formatDurationClock(totalSeconds) {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) {
+    return "--:--";
+  }
+
+  const roundedSeconds = Math.round(totalSeconds);
+  const minutes = Math.floor(roundedSeconds / 60);
+  const seconds = roundedSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatSignedSeconds(secondsValue) {
+  if (!Number.isFinite(secondsValue)) {
+    return "--";
+  }
+
+  const rounded = Math.round(secondsValue);
+  return `${rounded > 0 ? "+" : ""}${rounded}s`;
 }
 
 function triggerCsvDownload(fileName, csvContent) {
