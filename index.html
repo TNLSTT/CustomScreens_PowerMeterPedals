@@ -14,6 +14,7 @@
           <button class="nav-tab" data-view="powerPhase" type="button">Power Phase Explorer</button>
           <button class="nav-tab" data-view="game" type="button">Game</button>
           <button class="nav-tab" data-view="settings" type="button">Settings</button>
+          <button class="nav-tab" data-view="climb" type="button">Doi Suthep Calculator</button>
         </nav>
 
         <div class="top-toolbar-controls">
@@ -264,6 +265,88 @@
               <input id="reportEfficiencyCheckbox" class="settings-checkbox-input" type="checkbox" />
             </label>
           </div>
+        </section>
+      </section>
+
+
+      <section id="climbView" class="view-panel" aria-label="Doi Suthep climb calculator" hidden>
+        <section class="climb-layout">
+          <article class="avg-card climb-card">
+            <p class="avg-label">Doi Suthep Climb Predictor</p>
+            <p class="phase-description">Physics-based climb model calibrated to a real 36:53 reference effort on Doi Suthep.</p>
+
+            <div class="climb-grid">
+              <label class="settings-row" for="climbRiderWeightInput">
+                <span class="settings-label">Rider weight</span>
+                <input id="climbRiderWeightInput" class="ride-input settings-number-input" type="number" min="35" max="150" step="0.1" value="71.8" />
+                <span class="settings-value">kg</span>
+              </label>
+              <label class="settings-row" for="climbPowerInput">
+                <span class="settings-label">Power</span>
+                <input id="climbPowerInput" class="ride-input settings-number-input" type="number" min="80" max="600" step="1" value="283" />
+                <span class="settings-value">W</span>
+              </label>
+              <label class="settings-row" for="climbBikeWeightInput">
+                <span class="settings-label">Bike weight</span>
+                <input id="climbBikeWeightInput" class="ride-input settings-number-input" type="number" min="5" max="25" step="0.1" value="8" />
+                <span class="settings-value">kg</span>
+              </label>
+              <label class="settings-row" for="climbCdaInput">
+                <span class="settings-label">CdA override</span>
+                <input id="climbCdaInput" class="ride-input settings-number-input" type="number" min="0.1" max="0.6" step="0.001" placeholder="auto" />
+                <span class="settings-value">m²</span>
+              </label>
+            </div>
+
+            <div class="settings-action-row climb-action-row">
+              <button id="climbCalculateBtn" class="connect-btn success" type="button">Calculate</button>
+              <button id="climbExportBtn" class="connect-btn secondary" type="button">Export JSON</button>
+            </div>
+          </article>
+
+          <article class="avg-card climb-card">
+            <p class="avg-label">Predicted Output</p>
+            <div class="climb-results-grid">
+              <div class="climb-result-tile">
+                <p class="avg-sub-label">Predicted time</p>
+                <p id="climbPredictedTime" class="avg-value">--:--</p>
+              </div>
+              <div class="climb-result-tile">
+                <p class="avg-sub-label">Average speed</p>
+                <p id="climbAverageSpeed" class="avg-value">--</p>
+              </div>
+              <div class="climb-result-tile">
+                <p class="avg-sub-label">VAM</p>
+                <p id="climbVam" class="avg-value">--</p>
+              </div>
+              <div class="climb-result-tile">
+                <p class="avg-sub-label">W/kg</p>
+                <p id="climbWkg" class="avg-value">--</p>
+              </div>
+            </div>
+
+            <div class="climb-breakdown">
+              <div class="metric-row"><p class="avg-sub-label">Gravity power</p><p id="climbGravityBreakdown" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Rolling power</p><p id="climbRollingBreakdown" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Aero power</p><p id="climbAeroBreakdown" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Effective CdA</p><p id="climbEffectiveCda" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Calibration factor</p><p id="climbCalibrationFactor" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">+1W sensitivity</p><p id="climbPlusOneW" class="avg-sub-value">--</p></div>
+              <div class="metric-row"><p class="avg-sub-label">-1kg sensitivity</p><p id="climbMinusOneKg" class="avg-sub-value">--</p></div>
+            </div>
+          </article>
+
+          <article class="avg-card climb-card">
+            <p class="avg-label">Model Notes</p>
+            <div class="climb-breakdown">
+              <div class="metric-row"><p class="avg-sub-label">Climb</p><p class="avg-sub-value">10.8 km / 622 m / 5.8%</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Reference ride</p><p class="avg-sub-value">71.8 kg @ 283 W → 36:53</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Drivetrain efficiency</p><p class="avg-sub-value">97%</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Rolling Crr</p><p class="avg-sub-value">0.004</p></div>
+              <div class="metric-row"><p class="avg-sub-label">Air density</p><p class="avg-sub-value">1.1 kg/m³</p></div>
+            </div>
+            <pre id="climbJsonOutput" class="climb-json-output" aria-label="Climb JSON output">{}</pre>
+          </article>
         </section>
       </section>
 
