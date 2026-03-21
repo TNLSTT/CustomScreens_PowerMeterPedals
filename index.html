@@ -269,7 +269,15 @@
             <button id="addCustomBucketBtn" class="connect-btn secondary" type="button">Add Custom Bucket</button>
             <button id="resetCustomBucketsBtn" class="connect-btn" type="button">Reset to Default Buckets</button>
           </div>
-          <p class="phase-description">Leave the list empty to use the default 3W buckets. Custom buckets support a maximum of 7 rows.</p>
+          <div class="custom-bucket-help" aria-label="How to configure Power KJ buckets">
+            <p class="phase-description">Each row defines one dashboard bucket: choose the watt range that should count toward that bucket, then set the kJ goal you want to reach in that range.</p>
+            <ul class="custom-bucket-help-list">
+              <li><strong>From watts</strong>: the lowest power included in the bucket.</li>
+              <li><strong>To watts</strong>: the highest power included in the bucket.</li>
+              <li><strong>Goal kJ</strong>: how much energy to accumulate before that bucket shows complete.</li>
+            </ul>
+            <p class="phase-description">Example: <strong>180</strong> to <strong>210</strong> watts with a <strong>25 kJ</strong> goal tracks progress only while your live power stays within 180-210W. Leave the list empty to use the default 3W buckets.</p>
+          </div>
           <div id="customBucketEditor" class="custom-bucket-editor" aria-label="Custom Power KJ bucket editor"></div>
         </section>
         <section class="avg-card settings-card" aria-label="Ride report exports">
