@@ -139,10 +139,17 @@ const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
 const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
 const openTextScalingPopupBtnEl = document.getElementById("openTextScalingPopupBtn");
 const reportEfficiencyCheckboxEl = document.getElementById("reportEfficiencyCheckbox");
+const powerKjBucketsCardEl = document.getElementById("powerKjBucketsCard");
+const powerKjBucketsSubtitleEl = document.getElementById("powerKjBucketsSubtitle");
 const powerKjBucketsGridEl = document.getElementById("powerKjBucketsGrid");
+const powerKjBucketsEnabledCheckboxEl = document.getElementById("powerKjBucketsEnabledCheckbox");
+const customBucketEditorEl = document.getElementById("customBucketEditor");
+const addCustomBucketBtnEl = document.getElementById("addCustomBucketBtn");
+const resetCustomBucketsBtnEl = document.getElementById("resetCustomBucketsBtn");
 
 const WIDGET_LAYOUT_STORAGE_KEY = "widgetLayout:v1";
 const REPORT_EFFICIENCY_STORAGE_KEY = "reportEfficiencyEnabled:v1";
+const POWER_KJ_BUCKET_SETTINGS_STORAGE_KEY = "powerKjBucketSettings:v2";
 const POPUP_GRAPH_MIN_DURATION_SECONDS = 300;
 const POPUP_GRAPH_MAX_WATTS = 500;
 const WIDGET_TRANSFORM_LIMITS = {
@@ -183,6 +190,7 @@ const POWER_KJ_BUCKET_TARGET_TOTAL_KJ = 772;
 const POWER_KJ_TARGET_HUMP_CENTER_WATTS = 215;
 const POWER_KJ_TARGET_HUMP_SPREAD_WATTS = 20;
 const POWER_KJ_TARGET_HUMP_WEIGHT = 0.7;
+const MAX_CUSTOM_POWER_KJ_BUCKETS = 7;
 let powerDevice;
 let heartRateDevice;
 let powerCharacteristic;
@@ -208,7 +216,8 @@ let textScalingPopupWindow = null;
 let highCadenceStartedAtMs = null;
 let lastAutoNavigateAtMs = 0;
 const popupGraphPoints = [];
-const powerKjBuckets = createPowerKjBuckets();
+const powerKjBuckets = [];
+const powerKjBucketSettings = createDefaultPowerKjBucketSettings();
 let lastPowerBucketSampleTimestamp = null;
 const GAME_SENSITIVITY_STORAGE_KEY = "gameSensitivityPercent:v1";
 const GAME_BEST_SCORE_STORAGE_KEY = "gameBestScore:v1";
@@ -260,6 +269,13 @@ openTextScalingPopupBtnEl?.addEventListener("click", openTextScalingPopupWindowH
 reportEfficiencyCheckboxEl?.addEventListener("change", () => {
   localStorage.setItem(REPORT_EFFICIENCY_STORAGE_KEY, reportEfficiencyCheckboxEl.checked ? "1" : "0");
 });
+powerKjBucketsEnabledCheckboxEl?.addEventListener("change", () => {
+  powerKjBucketSettings.enabled = Boolean(powerKjBucketsEnabledCheckboxEl.checked);
+  persistPowerKjBucketSettings();
+  updatePowerKjBucketVisibility();
+});
+addCustomBucketBtnEl?.addEventListener("click", addCustomPowerKjBucket);
+resetCustomBucketsBtnEl?.addEventListener("click", resetCustomPowerKjBuckets);
 targetHrInputEl?.addEventListener("input", () => {
   updateTargetGuidanceLabel();
   recomputeRideHeartRateTotals();
@@ -287,6 +303,7 @@ renderInstantPhaseFeed();
 renderPowerKjBuckets();
 initializeTextScaling();
 initializeReportSettings();
+initializePowerKjBucketSettings();
 initializeWidgetLayoutSystem();
 initializeGameTab();
 initializeClimbCalculator();
@@ -894,27 +911,37 @@ function accumulateRideEnergy(watts, timestamp) {
   lastPowerSampleTimestamp = timestamp;
 }
 
-function createPowerKjBuckets() {
+function createPowerKjBucket(startWatts, endWatts, targetKj) {
+  return {
+    index: 0,
+    startWatts,
+    endWatts,
+    targetKj,
+    currentKj: 0,
+    rowEl: null,
+    valueEl: null,
+    efficiencyEl: null,
+    fillEl: null,
+    heartRateSum: 0,
+    heartRateCount: 0,
+    isAccumulating: false,
+  };
+}
+
+function createDefaultPowerKjBucketSettings() {
+  return {
+    enabled: true,
+    customBuckets: [],
+  };
+}
+
+function createDefaultPowerKjBuckets() {
   const buckets = [];
   for (let bucketStart = POWER_KJ_BUCKET_MIN_WATTS; bucketStart <= POWER_KJ_BUCKET_MAX_WATTS; bucketStart += POWER_KJ_BUCKET_WIDTH_WATTS) {
     const bucketEnd = Math.min(bucketStart + POWER_KJ_BUCKET_WIDTH_WATTS - 1, POWER_KJ_BUCKET_MAX_WATTS);
-    buckets.push({
-      index: buckets.length,
-      startWatts: bucketStart,
-      endWatts: bucketEnd,
-      targetKj: 0,
-      currentKj: 0,
-      rowEl: null,
-      valueEl: null,
-      efficiencyEl: null,
-      fillEl: null,
-      heartRateSum: 0,
-      heartRateCount: 0,
-      isAccumulating: false,
-    });
+    buckets.push(createPowerKjBucket(bucketStart, bucketEnd, 0));
   }
 
-  // Baseline + centered hump creates even targets with extra weight around ~215W.
   const baselineWeight = 1;
   let totalWeight = 0;
   for (const bucket of buckets) {
@@ -929,7 +956,24 @@ function createPowerKjBuckets() {
     bucket.targetKj = (bucket.targetWeight / totalWeight) * POWER_KJ_BUCKET_TARGET_TOTAL_KJ;
   }
 
-  return buckets;
+  return buckets.map((bucket, index) => ({ ...bucket, index }));
+}
+
+function getConfiguredPowerKjBuckets() {
+  const customBuckets = powerKjBucketSettings.customBuckets || [];
+  const sourceBuckets = customBuckets.length > 0
+    ? customBuckets.map((bucket) => createPowerKjBucket(bucket.startWatts, bucket.endWatts, bucket.targetKj))
+    : createDefaultPowerKjBuckets();
+
+  return sourceBuckets.map((bucket, index) => ({ ...bucket, index }));
+}
+
+function rebuildPowerKjBuckets() {
+  const nextBuckets = getConfiguredPowerKjBuckets();
+  powerKjBuckets.length = 0;
+  powerKjBuckets.push(...nextBuckets);
+  lastPowerBucketSampleTimestamp = null;
+  renderPowerKjBuckets();
 }
 
 function resetPowerKjBuckets() {
@@ -973,12 +1017,11 @@ function accumulatePowerBucketEnergy(watts, timestamp) {
 }
 
 function getPowerBucketForWatts(watts) {
-  if (!Number.isFinite(watts) || watts < POWER_KJ_BUCKET_MIN_WATTS || watts > POWER_KJ_BUCKET_MAX_WATTS) {
+  if (!Number.isFinite(watts)) {
     return null;
   }
 
-  const bucketIndex = Math.floor((watts - POWER_KJ_BUCKET_MIN_WATTS) / POWER_KJ_BUCKET_WIDTH_WATTS);
-  return powerKjBuckets[bucketIndex] || null;
+  return powerKjBuckets.find((bucket) => watts >= bucket.startWatts && watts <= bucket.endWatts) || null;
 }
 
 function setAccumulatingPowerKjBucket(activeBucket) {
@@ -997,6 +1040,7 @@ function renderPowerKjBuckets() {
     return;
   }
 
+  updatePowerKjBucketSubtitle();
   powerKjBucketsGridEl.innerHTML = "";
   const fragment = document.createDocumentFragment();
 
@@ -2931,6 +2975,225 @@ function isFiniteAngle(value) {
   return Number.isFinite(value);
 }
 
+
+function initializePowerKjBucketSettings() {
+  const storedRaw = localStorage.getItem(POWER_KJ_BUCKET_SETTINGS_STORAGE_KEY);
+  if (storedRaw) {
+    try {
+      const stored = JSON.parse(storedRaw);
+      powerKjBucketSettings.enabled = stored?.enabled !== false;
+      powerKjBucketSettings.customBuckets = sanitizeCustomPowerKjBuckets(stored?.customBuckets);
+    } catch (error) {
+      powerKjBucketSettings.enabled = true;
+      powerKjBucketSettings.customBuckets = [];
+    }
+  }
+
+  if (powerKjBucketsEnabledCheckboxEl) {
+    powerKjBucketsEnabledCheckboxEl.checked = powerKjBucketSettings.enabled;
+  }
+
+  rebuildPowerKjBuckets();
+  renderCustomBucketEditor();
+  updatePowerKjBucketVisibility();
+}
+
+function sanitizeCustomPowerKjBuckets(customBuckets) {
+  if (!Array.isArray(customBuckets)) {
+    return [];
+  }
+
+  return customBuckets
+    .slice(0, MAX_CUSTOM_POWER_KJ_BUCKETS)
+    .map((bucket) => ({
+      startWatts: Number(bucket?.startWatts),
+      endWatts: Number(bucket?.endWatts),
+      targetKj: Number(bucket?.targetKj),
+    }))
+    .filter((bucket) => Number.isFinite(bucket.startWatts)
+      && Number.isFinite(bucket.endWatts)
+      && Number.isFinite(bucket.targetKj)
+      && bucket.startWatts > 0
+      && bucket.endWatts >= bucket.startWatts
+      && bucket.targetKj > 0)
+    .map((bucket) => ({
+      startWatts: Math.round(bucket.startWatts),
+      endWatts: Math.round(bucket.endWatts),
+      targetKj: Number(bucket.targetKj),
+    }))
+    .sort((left, right) => left.startWatts - right.startWatts);
+}
+
+function persistPowerKjBucketSettings() {
+  localStorage.setItem(POWER_KJ_BUCKET_SETTINGS_STORAGE_KEY, JSON.stringify({
+    enabled: powerKjBucketSettings.enabled,
+    customBuckets: powerKjBucketSettings.customBuckets,
+  }));
+}
+
+function updatePowerKjBucketVisibility() {
+  if (powerKjBucketsCardEl) {
+    powerKjBucketsCardEl.hidden = !powerKjBucketSettings.enabled;
+  }
+}
+
+function updatePowerKjBucketSubtitle() {
+  if (!powerKjBucketsSubtitleEl) {
+    return;
+  }
+
+  if ((powerKjBucketSettings.customBuckets || []).length === 0) {
+    powerKjBucketsSubtitleEl.textContent = `3W buckets from ${POWER_KJ_BUCKET_MIN_WATTS}-${POWER_KJ_BUCKET_MAX_WATTS}W`;
+    return;
+  }
+
+  powerKjBucketsSubtitleEl.textContent = `${powerKjBucketSettings.customBuckets.length} custom bucket${powerKjBucketSettings.customBuckets.length === 1 ? '' : 's'}`;
+}
+
+function renderCustomBucketEditor() {
+  if (!customBucketEditorEl) {
+    return;
+  }
+
+  customBucketEditorEl.innerHTML = '';
+  const buckets = powerKjBucketSettings.customBuckets || [];
+
+  if (buckets.length === 0) {
+    const emptyEl = document.createElement('p');
+    emptyEl.className = 'custom-bucket-editor-empty';
+    emptyEl.textContent = 'No custom buckets configured. The dashboard will use the default 3W buckets.';
+    customBucketEditorEl.appendChild(emptyEl);
+  } else {
+    const listEl = document.createElement('div');
+    listEl.className = 'custom-bucket-editor-list';
+
+    buckets.forEach((bucket, index) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'custom-bucket-editor-row';
+      rowEl.append(
+        createCustomBucketNumberField(index, 'startWatts', 'Start watts', bucket.startWatts, 1, 1),
+        createCustomBucketNumberField(index, 'endWatts', 'End watts', bucket.endWatts, 1, 1),
+        createCustomBucketNumberField(index, 'targetKj', 'Target kJ', bucket.targetKj, 0.1, 0.1),
+        createCustomBucketSummary(index, bucket),
+        createCustomBucketDeleteButton(index),
+      );
+      listEl.appendChild(rowEl);
+    });
+
+    customBucketEditorEl.appendChild(listEl);
+  }
+
+  const noteEl = document.createElement('p');
+  noteEl.className = 'custom-bucket-limit-note';
+  noteEl.textContent = `${buckets.length}/${MAX_CUSTOM_POWER_KJ_BUCKETS} custom buckets in use.`;
+  customBucketEditorEl.appendChild(noteEl);
+
+  if (addCustomBucketBtnEl) {
+    addCustomBucketBtnEl.disabled = buckets.length >= MAX_CUSTOM_POWER_KJ_BUCKETS;
+  }
+}
+
+function createCustomBucketNumberField(index, field, label, value, step, min) {
+  const labelEl = document.createElement('label');
+  labelEl.className = 'settings-row';
+
+  const textEl = document.createElement('span');
+  textEl.className = 'settings-label';
+  textEl.textContent = label;
+
+  const inputEl = document.createElement('input');
+  inputEl.className = 'ride-input settings-number-input';
+  inputEl.type = 'number';
+  inputEl.min = String(min);
+  inputEl.step = String(step);
+  inputEl.value = String(value);
+  inputEl.addEventListener('input', () => updateCustomPowerKjBucketField(index, field, inputEl.value));
+
+  labelEl.append(textEl, inputEl);
+  return labelEl;
+}
+
+function createCustomBucketSummary(index, bucket) {
+  const summaryEl = document.createElement('div');
+  summaryEl.className = 'settings-row';
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'settings-label';
+  labelEl.textContent = 'Band summary';
+
+  const valueEl = document.createElement('span');
+  valueEl.className = 'settings-value';
+  valueEl.textContent = `${bucket.startWatts}-${bucket.endWatts}W • ${formatNumber(bucket.targetKj, 1)} kJ`;
+  valueEl.id = `customBucketSummary${index}`;
+
+  summaryEl.append(labelEl, valueEl);
+  return summaryEl;
+}
+
+function createCustomBucketDeleteButton(index) {
+  const wrapperEl = document.createElement('div');
+  wrapperEl.className = 'custom-bucket-editor-actions';
+
+  const buttonEl = document.createElement('button');
+  buttonEl.type = 'button';
+  buttonEl.className = 'connect-btn warning';
+  buttonEl.textContent = 'Remove';
+  buttonEl.addEventListener('click', () => removeCustomPowerKjBucket(index));
+
+  wrapperEl.appendChild(buttonEl);
+  return wrapperEl;
+}
+
+function addCustomPowerKjBucket() {
+  const buckets = powerKjBucketSettings.customBuckets || [];
+  if (buckets.length >= MAX_CUSTOM_POWER_KJ_BUCKETS) {
+    return;
+  }
+
+  const lastBucket = buckets[buckets.length - 1];
+  const startWatts = lastBucket ? lastBucket.endWatts + 1 : POWER_KJ_BUCKET_MIN_WATTS;
+  const endWatts = startWatts + 9;
+  buckets.push({ startWatts, endWatts, targetKj: 25 });
+  saveCustomPowerKjBuckets(buckets);
+}
+
+function resetCustomPowerKjBuckets() {
+  powerKjBucketSettings.customBuckets = [];
+  persistPowerKjBucketSettings();
+  rebuildPowerKjBuckets();
+  renderCustomBucketEditor();
+  updatePowerKjBucketSubtitle();
+}
+
+function removeCustomPowerKjBucket(index) {
+  const nextBuckets = (powerKjBucketSettings.customBuckets || []).filter((_, bucketIndex) => bucketIndex !== index);
+  saveCustomPowerKjBuckets(nextBuckets);
+}
+
+function updateCustomPowerKjBucketField(index, field, rawValue) {
+  const nextBuckets = (powerKjBucketSettings.customBuckets || []).map((bucket) => ({ ...bucket }));
+  if (!nextBuckets[index]) {
+    return;
+  }
+
+  nextBuckets[index][field] = rawValue === '' ? NaN : Number(rawValue);
+  saveCustomPowerKjBuckets(nextBuckets, { allowPartial: true });
+}
+
+function saveCustomPowerKjBuckets(nextBuckets, options = {}) {
+  const sanitizedBuckets = sanitizeCustomPowerKjBuckets(nextBuckets);
+  if (!options.allowPartial || sanitizedBuckets.length === nextBuckets.length) {
+    powerKjBucketSettings.customBuckets = sanitizedBuckets;
+    persistPowerKjBucketSettings();
+    rebuildPowerKjBuckets();
+    renderCustomBucketEditor();
+    updatePowerKjBucketSubtitle();
+    return;
+  }
+
+  powerKjBucketSettings.customBuckets = nextBuckets;
+  renderCustomBucketEditor();
+}
 
 function initializeReportSettings() {
   if (!reportEfficiencyCheckboxEl) {
