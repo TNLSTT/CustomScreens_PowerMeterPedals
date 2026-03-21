@@ -3095,7 +3095,7 @@ function renderCustomBucketEditor() {
 
 function createCustomBucketNumberField(index, field, label, value, step, min) {
   const labelEl = document.createElement('label');
-  labelEl.className = 'settings-row';
+  labelEl.className = 'settings-row custom-bucket-field';
 
   const textEl = document.createElement('span');
   textEl.className = 'settings-label';
@@ -3115,7 +3115,7 @@ function createCustomBucketNumberField(index, field, label, value, step, min) {
 
 function createCustomBucketSummary(index, bucket) {
   const summaryEl = document.createElement('div');
-  summaryEl.className = 'settings-row';
+  summaryEl.className = 'settings-row custom-bucket-summary';
 
   const labelEl = document.createElement('span');
   labelEl.className = 'settings-label';
