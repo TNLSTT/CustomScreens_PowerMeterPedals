@@ -3106,7 +3106,8 @@ function createCustomBucketNumberField(index, field, label, value, step, min) {
   inputEl.min = String(min);
   inputEl.step = String(step);
   inputEl.value = String(value);
-  inputEl.addEventListener('input', () => updateCustomPowerKjBucketField(index, field, inputEl.value));
+  inputEl.addEventListener('input', () => syncCustomPowerKjBucketField(index, field, inputEl.value));
+  inputEl.addEventListener('change', () => commitCustomPowerKjBucketField(index, field, inputEl.value));
 
   labelEl.append(textEl, inputEl);
   return labelEl;
@@ -3152,7 +3153,17 @@ function removeCustomPowerKjBucket(index) {
   saveCustomPowerKjBuckets(nextBuckets);
 }
 
-function updateCustomPowerKjBucketField(index, field, rawValue) {
+function syncCustomPowerKjBucketField(index, field, rawValue) {
+  const nextBuckets = (powerKjBucketSettings.customBuckets || []).map((bucket) => ({ ...bucket }));
+  if (!nextBuckets[index]) {
+    return;
+  }
+
+  nextBuckets[index][field] = rawValue === '' ? NaN : Number(rawValue);
+  powerKjBucketSettings.customBuckets = nextBuckets;
+}
+
+function commitCustomPowerKjBucketField(index, field, rawValue) {
   const nextBuckets = (powerKjBucketSettings.customBuckets || []).map((bucket) => ({ ...bucket }));
   if (!nextBuckets[index]) {
     return;
