@@ -20,10 +20,8 @@ The Game tab now includes a dodge mode with moving obstacles, score tracking, be
 ## 1) Setup instructions
 
 1. Install [Node.js](https://nodejs.org/) (v16+ recommended).
-2. Open a terminal in this folder:
-   ```bash
-   cd assioma-live-power
-   ```
+2. Open a terminal in this folder.
+3. No `npm install` step is required for the bundled server; `npm start` works with only Node.js installed. Ride data is stored in SQLite when `better-sqlite3` is available, and otherwise falls back to a JSON file automatically.
 
 ## 2) How to run server
 

@@ -5,8 +5,5 @@
   "description": "Minimal Web Bluetooth app for live cycling power from Favero Assioma pedals",
   "scripts": {
     "start": "node server.js"
-  },
-  "dependencies": {
-    "better-sqlite3": "^11.8.1"
   }
 }
