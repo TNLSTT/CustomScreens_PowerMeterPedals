@@ -2461,7 +2461,7 @@ function initializeTextScaling() {
 
     const storedRaw = localStorage.getItem(`textScale:${category}`);
     const stored = Number(storedRaw);
-    const initialPercent = Number.isFinite(stored) ? Math.min(260, Math.max(70, stored)) : Number(config.input.value || 100);
+    const initialPercent = Number.isFinite(stored) ? Math.min(400, Math.max(25, stored)) : Number(config.input.value || 100);
     config.input.value = String(initialPercent);
     applyTextScale(config.varName, initialPercent, config.value);
 
