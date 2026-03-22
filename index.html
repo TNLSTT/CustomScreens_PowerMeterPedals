@@ -272,12 +272,22 @@
           <p class="phase-description">Leave the list empty to use the default 3W buckets. Each custom row uses a lower watt band, upper watt band, and kJ quantity. Custom buckets support a maximum of 7 rows.</p>
           <div id="customBucketEditor" class="custom-bucket-editor" aria-label="Custom Power KJ bucket editor"></div>
         </section>
+        <section class="avg-card settings-card" aria-label="Ride events settings">
+          <p class="avg-label">Ride Events</p>
+          <p class="phase-description">Define prompts that appear once you reach a target kJ amount. Each event flashes for 15 seconds and asks you to coast at 0 watts for 2 seconds to confirm.</p>
+          <div class="settings-action-row settings-action-row-inline">
+            <button id="addRideEventBtn" class="connect-btn secondary" type="button">Add Event</button>
+            <button id="resetRideEventsBtn" class="connect-btn" type="button">Reset Events</button>
+          </div>
+          <p class="phase-description">Events are triggered in order of completed kJ and are included in the exported efficiency CSV.</p>
+          <div id="rideEventsEditor" class="custom-bucket-editor" aria-label="Ride events editor"></div>
+        </section>
         <section class="avg-card settings-card" aria-label="Ride report exports">
           <p class="avg-label">Ride Reports</p>
           <p class="phase-description">Choose which reports should auto-download as CSV files when a ride target finishes.</p>
           <div class="settings-grid">
             <label class="settings-row settings-checkbox-row" for="reportEfficiencyCheckbox">
-              <span class="settings-label">Efficiency report (rolling 1-minute averages + breathing interactions)</span>
+              <span class="settings-label">Efficiency report (rolling 1-minute averages + breathing interactions + ride events)</span>
               <input id="reportEfficiencyCheckbox" class="settings-checkbox-input" type="checkbox" />
             </label>
           </div>
@@ -398,6 +408,15 @@
         </section>
       </section>
     </main>
+
+    <div id="rideEventOverlay" class="ride-event-overlay" hidden aria-live="assertive">
+      <div class="ride-event-overlay-card">
+        <p class="ride-event-overlay-kicker">Ride Event</p>
+        <p id="rideEventOverlayLabel" class="ride-event-overlay-label">--</p>
+        <p id="rideEventOverlayGoal" class="ride-event-overlay-goal">--</p>
+        <p id="rideEventOverlayCountdown" class="ride-event-overlay-countdown">15s remaining</p>
+      </div>
+    </div>
 
     <script src="app.js"></script>
   </body>
