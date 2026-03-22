@@ -60,6 +60,24 @@ async function handleApiRequest(req, res, pathname) {
     return true;
   }
 
+  if (req.method === "GET" && /^\/api\/rides\/\d+\/stream$/.test(pathname)) {
+    try {
+      const rideId = Number(pathname.split("/")[3]);
+      const rows = all(
+        `SELECT id, ride_id, timestamp, power, hr, w_per_hr
+         FROM ride_stream
+         WHERE ride_id = @ride_id
+         ORDER BY timestamp ASC, id ASC`,
+        { ride_id: rideId }
+      );
+      sendJson(res, 200, rows);
+    } catch (error) {
+      console.error("Failed to fetch ride stream:", error);
+      sendJson(res, 500, { error: "Failed to fetch ride stream" });
+    }
+    return true;
+  }
+
   if (req.method === "POST" && pathname === "/api/rides") {
     try {
       const body = await readJsonBody(req);

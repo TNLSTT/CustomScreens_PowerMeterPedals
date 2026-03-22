@@ -21,7 +21,7 @@ const RIDE_START_REQUIRED_SECONDS = 3;
 const AUTO_NAVIGATE_CADENCE_THRESHOLD = 120;
 const AUTO_NAVIGATE_HOLD_MS = 2000;
 const AUTO_NAVIGATE_COOLDOWN_MS = 3000;
-const VIEW_ROTATION_ORDER = ["dashboard", "powerPhase", "game", "settings", "climb"];
+const VIEW_ROTATION_ORDER = ["dashboard", "powerPhase", "history", "game", "settings", "climb"];
 
 const connectBtn = document.getElementById("connectBtn");
 const connectHrBtn = document.getElementById("connectHrBtn");
@@ -89,6 +89,7 @@ const phaseWindowGridEl = document.getElementById("phaseWindowGrid");
 const phaseBaselineGridEl = document.getElementById("phaseBaselineGrid");
 const instantPhaseFeedEl = document.getElementById("instantPhaseFeed");
 const settingsViewEl = document.getElementById("settingsView");
+const historyViewEl = document.getElementById("historyView");
 const gameViewEl = document.getElementById("gameView");
 const climbViewEl = document.getElementById("climbView");
 const climbRiderWeightInputEl = document.getElementById("climbRiderWeightInput");
@@ -153,6 +154,20 @@ const powerKjBucketsEnabledCheckboxEl = document.getElementById("powerKjBucketsE
 const customBucketEditorEl = document.getElementById("customBucketEditor");
 const addCustomBucketBtnEl = document.getElementById("addCustomBucketBtn");
 const resetCustomBucketsBtnEl = document.getElementById("resetCustomBucketsBtn");
+const rideHistoryListEl = document.getElementById("rideHistoryList");
+const rideHistoryStatusEl = document.getElementById("rideHistoryStatus");
+const refreshRideHistoryBtnEl = document.getElementById("refreshRideHistoryBtn");
+const rideHistoryTitleEl = document.getElementById("rideHistoryTitle");
+const rideHistorySubtitleEl = document.getElementById("rideHistorySubtitle");
+const historyTotalKjEl = document.getElementById("historyTotalKj");
+const historyAvgPowerEl = document.getElementById("historyAvgPower");
+const historyAvgHrEl = document.getElementById("historyAvgHr");
+const historyAvgWPerHrEl = document.getElementById("historyAvgWPerHr");
+const historySampleCountEl = document.getElementById("historySampleCount");
+const historyDurationEl = document.getElementById("historyDuration");
+const rideHistoryChartEl = document.getElementById("rideHistoryChart");
+const rideHistoryChartLabelEl = document.getElementById("rideHistoryChartLabel");
+const rideHistorySamplesBodyEl = document.getElementById("rideHistorySamplesBody");
 
 const WIDGET_LAYOUT_STORAGE_KEY = "widgetLayout:v1";
 const REPORT_EFFICIENCY_STORAGE_KEY = "reportEfficiencyEnabled:v1";
@@ -168,6 +183,13 @@ const widgetLayoutState = {
   editMode: false,
   widgets: new Map(),
   activePointers: new Map(),
+};
+const rideHistoryState = {
+  rides: [],
+  selectedRideId: null,
+  selectedStream: [],
+  loading: false,
+  loaded: false,
 };
 
 const rollingSamples = [];
@@ -324,6 +346,7 @@ initializePowerKjBucketSettings();
 initializeRideEventSettings();
 initializeWidgetLayoutSystem();
 initializeGameTab();
+initializeRideHistoryTab();
 initializeClimbCalculator();
 updatePrimaryMetricDisplays();
 setInterval(updateRideProgressUi, 1000);
@@ -2074,18 +2097,20 @@ function drawPopupGraph(maxDurationSeconds = POPUP_GRAPH_MIN_DURATION_SECONDS) {
 }
 
 function switchView(viewName) {
-  const activeView = ["dashboard", "powerPhase", "game", "settings", "climb"].includes(viewName)
+  const activeView = ["dashboard", "powerPhase", "history", "game", "settings", "climb"].includes(viewName)
     ? viewName
     : "dashboard";
 
   const isDashboard = activeView === "dashboard";
   const isPowerPhase = activeView === "powerPhase";
+  const isHistory = activeView === "history";
   const isGame = activeView === "game";
   const isSettings = activeView === "settings";
   const isClimb = activeView === "climb";
 
   dashboardViewEl?.classList.toggle("active", isDashboard);
   powerPhaseViewEl?.classList.toggle("active", isPowerPhase);
+  historyViewEl?.classList.toggle("active", isHistory);
   gameViewEl?.classList.toggle("active", isGame);
   settingsViewEl?.classList.toggle("active", isSettings);
   climbViewEl?.classList.toggle("active", isClimb);
@@ -2096,6 +2121,9 @@ function switchView(viewName) {
   if (powerPhaseViewEl) {
     powerPhaseViewEl.hidden = !isPowerPhase;
   }
+  if (historyViewEl) {
+    historyViewEl.hidden = !isHistory;
+  }
   if (gameViewEl) {
     gameViewEl.hidden = !isGame;
   }
@@ -2104,6 +2132,10 @@ function switchView(viewName) {
   }
   if (climbViewEl) {
     climbViewEl.hidden = !isClimb;
+  }
+
+  if (isHistory) {
+    ensureRideHistoryLoaded();
   }
 
   navTabs.forEach((tab) => {
@@ -3949,4 +3981,312 @@ function formatBalance(leftPercent) {
 
   const rightPercent = 100 - leftPercent;
   return `${formatNumber(leftPercent, 1)} / ${formatNumber(rightPercent, 1)}`;
+}
+
+function initializeRideHistoryTab() {
+  refreshRideHistoryBtnEl?.addEventListener("click", () => {
+    loadRideHistory({ force: true });
+  });
+  renderRideHistoryList();
+  renderRideHistoryDetails();
+}
+
+function ensureRideHistoryLoaded() {
+  if (rideHistoryState.loaded || rideHistoryState.loading) {
+    return;
+  }
+
+  loadRideHistory();
+}
+
+async function loadRideHistory({ force = false } = {}) {
+  if (!rideHistoryListEl || (rideHistoryState.loading && !force)) {
+    return;
+  }
+
+  rideHistoryState.loading = true;
+  if (rideHistoryStatusEl) {
+    rideHistoryStatusEl.textContent = "Loading saved rides...";
+  }
+
+  try {
+    const response = await fetch("/api/rides", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Ride history request failed (${response.status})`);
+    }
+
+    const rides = await response.json();
+    rideHistoryState.rides = Array.isArray(rides) ? rides : [];
+    rideHistoryState.loaded = true;
+
+    const hasSelectedRide = rideHistoryState.rides.some((ride) => Number(ride.id) === Number(rideHistoryState.selectedRideId));
+    if (!hasSelectedRide) {
+      rideHistoryState.selectedRideId = rideHistoryState.rides[0]?.id ?? null;
+      rideHistoryState.selectedStream = [];
+    }
+
+    renderRideHistoryList();
+    renderRideHistoryDetails();
+
+    if (rideHistoryState.selectedRideId != null) {
+      await loadRideStream(rideHistoryState.selectedRideId);
+    }
+  } catch (error) {
+    console.error("Failed to load ride history:", error);
+    if (rideHistoryStatusEl) {
+      rideHistoryStatusEl.textContent = "Could not load rides from the database.";
+    }
+  } finally {
+    rideHistoryState.loading = false;
+  }
+}
+
+async function loadRideStream(rideId) {
+  if (!Number.isFinite(Number(rideId))) {
+    rideHistoryState.selectedStream = [];
+    renderRideHistoryDetails();
+    return;
+  }
+
+  if (rideHistoryChartLabelEl) {
+    rideHistoryChartLabelEl.textContent = "Loading recorded samples...";
+  }
+
+  try {
+    const response = await fetch(`/api/rides/${rideId}/stream`, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Ride stream request failed (${response.status})`);
+    }
+
+    const streamRows = await response.json();
+    rideHistoryState.selectedStream = Array.isArray(streamRows) ? streamRows : [];
+  } catch (error) {
+    console.error("Failed to load ride stream:", error);
+    rideHistoryState.selectedStream = [];
+    if (rideHistoryChartLabelEl) {
+      rideHistoryChartLabelEl.textContent = "Could not load stream samples for this ride.";
+    }
+  }
+
+  renderRideHistoryDetails();
+}
+
+function selectRideHistoryRide(rideId) {
+  const numericRideId = Number(rideId);
+  if (!Number.isFinite(numericRideId)) {
+    return;
+  }
+
+  rideHistoryState.selectedRideId = numericRideId;
+  rideHistoryState.selectedStream = [];
+  renderRideHistoryList();
+  renderRideHistoryDetails();
+  loadRideStream(numericRideId);
+}
+
+function renderRideHistoryList() {
+  if (!rideHistoryListEl) {
+    return;
+  }
+
+  const rides = Array.isArray(rideHistoryState.rides) ? rideHistoryState.rides : [];
+  rideHistoryListEl.innerHTML = "";
+
+  if (rideHistoryStatusEl) {
+    rideHistoryStatusEl.textContent = rides.length > 0
+      ? `${rides.length} saved ride${rides.length === 1 ? "" : "s"} found.`
+      : (rideHistoryState.loaded ? "No saved rides yet." : "Open this tab to load saved rides.");
+  }
+
+  if (rides.length === 0) {
+    const emptyEl = document.createElement("p");
+    emptyEl.className = "history-empty";
+    emptyEl.textContent = rideHistoryState.loaded ? "Record a ride and save it to the database to see it here." : "";
+    rideHistoryListEl.append(emptyEl);
+    return;
+  }
+
+  rides.forEach((ride) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-ride-item";
+    button.dataset.rideId = String(ride.id);
+    const isActive = Number(ride.id) === Number(rideHistoryState.selectedRideId);
+    button.classList.toggle("active", isActive);
+    button.innerHTML = `
+      <span class="history-ride-date">${formatRideHistoryDate(ride)}</span>
+      <span class="history-ride-meta">${formatNumber(ride.total_kj, 1)} kJ • ${formatNumber(ride.avg_power, 0)} W • ${formatNumber(ride.avg_hr, 0)} bpm</span>
+    `;
+    button.addEventListener("click", () => selectRideHistoryRide(ride.id));
+    rideHistoryListEl.append(button);
+  });
+}
+
+function renderRideHistoryDetails() {
+  const selectedRide = (rideHistoryState.rides || []).find((ride) => Number(ride.id) === Number(rideHistoryState.selectedRideId)) || null;
+  const stream = Array.isArray(rideHistoryState.selectedStream) ? rideHistoryState.selectedStream : [];
+
+  if (!selectedRide) {
+    if (rideHistoryTitleEl) {
+      rideHistoryTitleEl.textContent = "No ride selected";
+    }
+    if (rideHistorySubtitleEl) {
+      rideHistorySubtitleEl.textContent = "Choose a saved ride day to inspect totals and the stream trace.";
+    }
+    setHistoryMetric(historyTotalKjEl, "--");
+    setHistoryMetric(historyAvgPowerEl, "--");
+    setHistoryMetric(historyAvgHrEl, "--");
+    setHistoryMetric(historyAvgWPerHrEl, "--");
+    setHistoryMetric(historySampleCountEl, "--");
+    setHistoryMetric(historyDurationEl, "--");
+    renderRideHistoryChart([]);
+    renderRideHistorySamples([]);
+    return;
+  }
+
+  const historySummary = buildRideHistorySummary(selectedRide, stream);
+  if (rideHistoryTitleEl) {
+    rideHistoryTitleEl.textContent = formatRideHistoryDate(selectedRide);
+  }
+  if (rideHistorySubtitleEl) {
+    rideHistorySubtitleEl.textContent = `Saved ${formatRideHistoryCreatedAt(selectedRide)} • Ride #${selectedRide.id}`;
+  }
+  setHistoryMetric(historyTotalKjEl, formatNumber(selectedRide.total_kj, 1));
+  setHistoryMetric(historyAvgPowerEl, formatNumber(selectedRide.avg_power, 0));
+  setHistoryMetric(historyAvgHrEl, formatNumber(selectedRide.avg_hr, 0));
+  setHistoryMetric(historyAvgWPerHrEl, formatNumber(selectedRide.avg_w_per_hr, 2));
+  setHistoryMetric(historySampleCountEl, String(historySummary.sampleCount));
+  setHistoryMetric(historyDurationEl, historySummary.durationLabel);
+  renderRideHistoryChart(stream);
+  renderRideHistorySamples(stream);
+}
+
+function buildRideHistorySummary(ride, stream) {
+  const timestamps = stream
+    .map((row) => Number(row.timestamp))
+    .filter((timestamp) => Number.isFinite(timestamp));
+  const sampleCount = stream.length;
+  const durationSeconds = timestamps.length >= 2
+    ? Math.max(0, (Math.max(...timestamps) - Math.min(...timestamps)) / 1000)
+    : null;
+
+  return {
+    ride,
+    sampleCount,
+    durationLabel: durationSeconds == null ? "--" : formatElapsedDuration(durationSeconds),
+  };
+}
+
+function setHistoryMetric(element, value) {
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function renderRideHistoryChart(stream) {
+  if (!rideHistoryChartEl) {
+    return;
+  }
+
+  if (!Array.isArray(stream) || stream.length === 0) {
+    rideHistoryChartEl.innerHTML = '<div class="history-chart-empty">No stream samples saved for this ride yet.</div>';
+    return;
+  }
+
+  const powerPoints = stream.filter((row) => Number.isFinite(Number(row.timestamp)) && Number.isFinite(Number(row.power)));
+  const hrPoints = stream.filter((row) => Number.isFinite(Number(row.timestamp)) && Number.isFinite(Number(row.hr)));
+  if (powerPoints.length === 0 && hrPoints.length === 0) {
+    rideHistoryChartEl.innerHTML = '<div class="history-chart-empty">This ride has samples, but none with chartable power or heart-rate values.</div>';
+    return;
+  }
+
+  const allTimestamps = [...powerPoints, ...hrPoints].map((row) => Number(row.timestamp));
+  const minTimestamp = Math.min(...allTimestamps);
+  const maxTimestamp = Math.max(...allTimestamps);
+  const timeSpan = Math.max(1, maxTimestamp - minTimestamp);
+  const maxPower = Math.max(200, ...powerPoints.map((row) => Number(row.power) || 0));
+  const maxHr = Math.max(120, ...hrPoints.map((row) => Number(row.hr) || 0));
+  const width = 960;
+  const height = 280;
+  const buildPath = (rows, key, maxValue) => rows.map((row, index) => {
+    const x = ((Number(row.timestamp) - minTimestamp) / timeSpan) * width;
+    const y = height - ((Number(row[key]) || 0) / maxValue) * height;
+    return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(" ");
+
+  const powerPath = buildPath(powerPoints, "power", maxPower);
+  const hrPath = buildPath(hrPoints, "hr", maxHr);
+  const durationSeconds = Math.round(timeSpan / 1000);
+  if (rideHistoryChartLabelEl) {
+    rideHistoryChartLabelEl.textContent = `${stream.length} samples across ${formatElapsedDuration(durationSeconds)}.`;
+  }
+
+  rideHistoryChartEl.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" class="history-chart-svg" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="historyPowerFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(56,189,248,0.4)" />
+          <stop offset="100%" stop-color="rgba(56,189,248,0.02)" />
+        </linearGradient>
+      </defs>
+      <line x1="0" y1="${height - 1}" x2="${width}" y2="${height - 1}" class="history-axis" />
+      <path d="${powerPath}" class="history-line history-line-power" />
+      <path d="${hrPath}" class="history-line history-line-hr" />
+    </svg>
+    <div class="history-chart-legend">
+      <span><i class="history-legend-swatch power"></i>Power</span>
+      <span><i class="history-legend-swatch hr"></i>Heart rate</span>
+    </div>
+  `;
+}
+
+function renderRideHistorySamples(stream) {
+  if (!rideHistorySamplesBodyEl) {
+    return;
+  }
+
+  const rows = Array.isArray(stream) ? [...stream].slice(-12).reverse() : [];
+  if (rows.length === 0) {
+    rideHistorySamplesBodyEl.innerHTML = '<tr><td colspan="4">No ride samples saved for this ride.</td></tr>';
+    return;
+  }
+
+  rideHistorySamplesBodyEl.innerHTML = rows.map((row) => {
+    const timestampLabel = formatHistorySampleTimestamp(row.timestamp, stream[0]?.timestamp);
+    return `<tr>
+      <td>${timestampLabel}</td>
+      <td>${formatNumber(row.power, 0)}</td>
+      <td>${formatNumber(row.hr, 0)}</td>
+      <td>${formatNumber(row.w_per_hr, 2)}</td>
+    </tr>`;
+  }).join("");
+}
+
+function formatRideHistoryDate(ride) {
+  const source = ride?.date || ride?.created_at;
+  const parsed = source ? new Date(source) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return ride?.date || `Ride #${ride?.id ?? "--"}`;
+  }
+
+  return parsed.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatRideHistoryCreatedAt(ride) {
+  const parsed = ride?.created_at ? new Date(ride.created_at) : null;
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return "unknown time";
+  }
+
+  return parsed.toLocaleString([], { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function formatHistorySampleTimestamp(timestamp, firstTimestamp) {
+  const numericTimestamp = Number(timestamp);
+  const numericFirst = Number(firstTimestamp);
+  if (Number.isFinite(numericTimestamp) && Number.isFinite(numericFirst)) {
+    return formatElapsedDuration(Math.max(0, (numericTimestamp - numericFirst) / 1000));
+  }
+
+  return "--";
 }
