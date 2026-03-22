@@ -9,7 +9,7 @@ The Power KJ Buckets widget can now be toggled on/off from Settings, and you can
 
 When enabled in Settings, the efficiency CSV report now includes breathing interaction columns (average breaths/min, breaths per kJ, watts per breath, HR per breath, and minute-over-minute deltas) so you can analyze breathing impact on heart rate and power.
 
-The Settings page also includes ride events that trigger at chosen kJ milestones, flash on screen for 15 seconds, and can be confirmed by coasting at 0 W for 2 seconds. Triggered and confirmed ride events are appended to the exported efficiency CSV.
+The Settings page also includes ride events that trigger at chosen kJ milestones, flash on screen for 15 seconds, and log automatically as soon as they are reached. Triggered ride events are appended to the exported efficiency CSV.
 
 The main dashboard now also tracks accumulated energy (kJ) in power buckets: **0-100**, **101-150**, **151-200**, **201-250**, **251-300**, **301-400**, and **401+** watts.
 
