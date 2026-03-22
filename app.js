@@ -61,6 +61,11 @@ const wpHr3mEl = document.getElementById("wpHr3m");
 const wpHr5mEl = document.getElementById("wpHr5m");
 const wpHr10mEl = document.getElementById("wpHr10m");
 const wpHr20mEl = document.getElementById("wpHr20m");
+const wpBreath1mEl = document.getElementById("wpBreath1m");
+const wpBreath3mEl = document.getElementById("wpBreath3m");
+const wpBreath5mEl = document.getElementById("wpBreath5m");
+const wpBreath10mEl = document.getElementById("wpBreath10m");
+const wpBreath20mEl = document.getElementById("wpBreath20m");
 const breathsPerMinuteEl = document.getElementById("breathsPerMinute");
 const breathsPerKj3mEl = document.getElementById("breathsPerKj3m");
 const breathsPerKjRideEl = document.getElementById("breathsPerKjRide");
@@ -1409,17 +1414,17 @@ function updateRollingAverages() {
   const now = Date.now();
   pruneRollingSamples(now);
 
-  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, pv1mEl, hrAvg1mEl, balanceAvg1mEl, cadAvg1mEl, wpHr1mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, pv3mEl, hrAvg3mEl, balanceAvg3mEl, cadAvg3mEl, wpHr3mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, pv5mEl, hrAvg5mEl, balanceAvg5mEl, cadAvg5mEl, wpHr5mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, pv10mEl, hrAvg10mEl, balanceAvg10mEl, cadAvg10mEl, wpHr10mEl);
-  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, pv20mEl, hrAvg20mEl, balanceAvg20mEl, cadAvg20mEl, wpHr20mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["1m"], avg1mEl, pv1mEl, hrAvg1mEl, balanceAvg1mEl, cadAvg1mEl, wpHr1mEl, wpBreath1mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["3m"], avg3mEl, pv3mEl, hrAvg3mEl, balanceAvg3mEl, cadAvg3mEl, wpHr3mEl, wpBreath3mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["5m"], avg5mEl, pv5mEl, hrAvg5mEl, balanceAvg5mEl, cadAvg5mEl, wpHr5mEl, wpBreath5mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["10m"], avg10mEl, pv10mEl, hrAvg10mEl, balanceAvg10mEl, cadAvg10mEl, wpHr10mEl, wpBreath10mEl);
+  setWindowMetrics(now, WINDOWS_IN_MS["20m"], avg20mEl, pv20mEl, hrAvg20mEl, balanceAvg20mEl, cadAvg20mEl, wpHr20mEl, wpBreath20mEl);
   updateBreathingMetrics();
   updateGuidancePanel();
   updatePowerPhaseExplorer();
 }
 
-function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl, balanceAvgEl, cadenceAvgEl, wpHrEl) {
+function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl, balanceAvgEl, cadenceAvgEl, wpHrEl, wpBreathEl) {
   const avgPower = getWindowAveragePower(now, windowMs);
   const startTime = now - windowMs;
   const samplesInWindow = rollingSamples.filter((sample) => sample.timestamp >= startTime);
@@ -1431,6 +1436,7 @@ function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl,
     balanceAvgEl.textContent = "--";
     cadenceAvgEl.textContent = "--";
     wpHrEl.textContent = "--";
+    wpBreathEl.textContent = "--";
     return;
   }
 
@@ -1446,6 +1452,10 @@ function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl,
   const avgCadence = cadenceSamples.length > 0
     ? cadenceSamples.reduce((sum, sample) => sum + sample.cadence, 0) / cadenceSamples.length
     : null;
+  const breathSamples = samplesInWindow.filter((sample) => Number.isFinite(sample.breathsPerMinute));
+  const avgBreathsPerMinute = breathSamples.length > 0
+    ? breathSamples.reduce((sum, sample) => sum + sample.breathsPerMinute, 0) / breathSamples.length
+    : null;
 
   powerEl.textContent = formatNumber(avgPower, 2);
 
@@ -1456,6 +1466,11 @@ function setWindowMetrics(now, windowMs, powerEl, variabilityEl, heartRateAvgEl,
   heartRateAvgEl.textContent = avgHeartRate == null ? "--" : formatNumber(avgHeartRate, 2);
   balanceAvgEl.textContent = formatBalance(avgBalance);
   cadenceAvgEl.textContent = avgCadence == null ? "--" : formatNumber(avgCadence, 2);
+
+  const wattsPerBreath = Number.isFinite(avgBreathsPerMinute) && avgBreathsPerMinute > 0
+    ? avgPower / avgBreathsPerMinute
+    : null;
+  wpBreathEl.textContent = wattsPerBreath == null ? "--" : formatNumber(wattsPerBreath, 2);
 
   if (!Number.isFinite(avgHeartRate) || avgHeartRate <= 0) {
     wpHrEl.textContent = "--";
