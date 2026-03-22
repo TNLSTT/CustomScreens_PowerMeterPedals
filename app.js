@@ -223,8 +223,6 @@ const POWER_KJ_TARGET_HUMP_WEIGHT = 0.7;
 const MAX_CUSTOM_POWER_KJ_BUCKETS = 7;
 const MAX_RIDE_EVENTS = 8;
 const RIDE_EVENT_FLASH_MS = 15000;
-const RIDE_EVENT_CONFIRM_WATTS = 0;
-const RIDE_EVENT_CONFIRM_SECONDS = 2;
 let powerDevice;
 let heartRateDevice;
 let powerCharacteristic;
@@ -955,10 +953,10 @@ function accumulateRideEnergy(watts, timestamp) {
   rideState.joulesAccumulated += deltaJoules;
   rideState.activeSeconds += deltaSeconds;
   lastPowerSampleTimestamp = timestamp;
-  processRideEvents(timestamp, watts);
+  processRideEvents(timestamp);
 }
 
-function processRideEvents(timestamp, watts) {
+function processRideEvents(timestamp) {
   if (!rideState?.started || rideState.completed) {
     return;
   }
@@ -970,58 +968,39 @@ function processRideEvents(timestamp, watts) {
     }
   }
 
-  const currentActiveRideEvent = activeRideEvent && rideEvents.includes(activeRideEvent) && !activeRideEvent.confirmed
+  const currentActiveRideEvent = activeRideEvent && rideEvents.includes(activeRideEvent)
     ? activeRideEvent
-    : rideEvents.find((rideEvent) => rideEvent.triggered && !rideEvent.confirmed && !Number.isFinite(rideEvent.expiredAtTimestamp)) || null;
+    : rideEvents.find((rideEvent) => rideEvent.triggered && Number.isFinite(rideEvent.overlayDeadlineTimestamp) && !Number.isFinite(rideEvent.expiredAtTimestamp)) || null;
 
   activeRideEvent = currentActiveRideEvent;
   if (!currentActiveRideEvent) {
     stopRideEventOverlay();
-    return;
-  }
-
-  const windowExpired = Number.isFinite(currentActiveRideEvent.overlayDeadlineTimestamp)
-    && timestamp >= currentActiveRideEvent.overlayDeadlineTimestamp;
-
-  if (windowExpired) {
-    currentActiveRideEvent.expiredAtTimestamp = currentActiveRideEvent.overlayDeadlineTimestamp;
-    currentActiveRideEvent.confirmationStartedAt = null;
-    activeRideEvent = null;
-    stopRideEventOverlay();
-    return;
-  }
-
-  if (Number.isFinite(watts) && watts <= RIDE_EVENT_CONFIRM_WATTS) {
-    if (!Number.isFinite(currentActiveRideEvent.confirmationStartedAt)) {
-      currentActiveRideEvent.confirmationStartedAt = timestamp;
-    }
-
-    const confirmElapsedSeconds = Math.max(0, (timestamp - currentActiveRideEvent.confirmationStartedAt) / 1000);
-    if (confirmElapsedSeconds >= RIDE_EVENT_CONFIRM_SECONDS) {
-      currentActiveRideEvent.confirmed = true;
-      currentActiveRideEvent.confirmedAtTimestamp = timestamp;
-      rideState.completedRideEvents = rideEvents.filter((rideEvent) => rideEvent.triggered);
-      activeRideEvent = null;
-      setStatus(`Ride event confirmed: ${currentActiveRideEvent.label}.`);
-      stopRideEventOverlay();
-      return;
-    }
   } else {
-    currentActiveRideEvent.confirmationStartedAt = null;
+    const windowExpired = Number.isFinite(currentActiveRideEvent.overlayDeadlineTimestamp)
+      && timestamp >= currentActiveRideEvent.overlayDeadlineTimestamp;
+
+    if (windowExpired) {
+      currentActiveRideEvent.expiredAtTimestamp = currentActiveRideEvent.overlayDeadlineTimestamp;
+      activeRideEvent = null;
+      stopRideEventOverlay();
+    } else {
+      showRideEventOverlay(currentActiveRideEvent, timestamp);
+    }
   }
 
-  showRideEventOverlay(currentActiveRideEvent, timestamp);
   rideState.completedRideEvents = rideEvents.filter((rideEvent) => rideEvent.triggered);
-  rideState.pendingRideEventCount = rideEvents.filter((rideEvent) => rideEvent.triggered && !rideEvent.confirmed && !Number.isFinite(rideEvent.expiredAtTimestamp)).length;
+  rideState.pendingRideEventCount = rideEvents.filter((rideEvent) => rideEvent.triggered && Number.isFinite(rideEvent.overlayDeadlineTimestamp) && !Number.isFinite(rideEvent.expiredAtTimestamp)).length;
 }
 
 function triggerRideEvent(rideEvent, timestamp) {
   rideEvent.triggered = true;
   rideEvent.triggeredAtTimestamp = timestamp;
   rideEvent.triggeredAtKj = rideState?.doneKj ?? null;
+  rideEvent.confirmed = true;
+  rideEvent.confirmedAtTimestamp = timestamp;
   rideEvent.overlayDeadlineTimestamp = timestamp + RIDE_EVENT_FLASH_MS;
   rideState.completedRideEvents = (rideState.rideEvents || []).filter((event) => event.triggered);
-  setStatus(`Ride event: ${rideEvent.label}. Coast at 0W for 2s to confirm.`);
+  setStatus(`Ride event locked in automatically: ${rideEvent.label}.`);
   showRideEventOverlay(rideEvent, timestamp);
 }
 
@@ -1033,9 +1012,9 @@ function showRideEventOverlay(rideEvent, timestamp = Date.now()) {
   const remainingMs = Math.max(0, (rideEvent.overlayDeadlineTimestamp || timestamp) - timestamp);
   const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
   rideEventOverlayLabelEl.textContent = rideEvent.label;
-  rideEventOverlayGoalEl.textContent = `${formatNumber(rideEvent.targetKj, 1)} kJ reached • Coast at 0W for 2s to confirm`;
+  rideEventOverlayGoalEl.textContent = `${formatNumber(rideEvent.targetKj, 1)} kJ reached • Logged automatically`;
   rideEventOverlayCountdownEl.textContent = rideEvent.confirmed
-    ? 'Confirmed'
+    ? `Auto-logged • ${remainingSeconds}s remaining`
     : `${remainingSeconds}s remaining`;
   rideEventOverlayEl.hidden = false;
   rideEventOverlayEl.classList.add('active');
@@ -1117,7 +1096,6 @@ function getConfiguredRideEvents() {
       triggeredAtTimestamp: null,
       confirmed: false,
       confirmedAtTimestamp: null,
-      confirmationStartedAt: null,
       expiredAtTimestamp: null,
       overlayDeadlineTimestamp: null,
     }))
