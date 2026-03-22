@@ -52,6 +52,15 @@ function createJsonStore() {
           });
         }
 
+        if (normalizedSql.includes("SELECT ID, RIDE_ID, TIMESTAMP, POWER, HR, W_PER_HR FROM RIDE_STREAM WHERE RIDE_ID = @RIDE_ID")) {
+          return state.ride_stream
+            .filter((row) => Number(row.ride_id) === Number(params.ride_id))
+            .sort((left, right) => {
+              const timestampCompare = Number(left.timestamp || 0) - Number(right.timestamp || 0);
+              return timestampCompare !== 0 ? timestampCompare : left.id - right.id;
+            });
+        }
+
         throw new Error(`Unsupported JSON database query: ${sql}`);
       },
 

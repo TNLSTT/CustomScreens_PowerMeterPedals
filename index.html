@@ -13,6 +13,7 @@
           <button class="nav-tab active" data-view="dashboard" type="button">Main Dashboard</button>
           <button class="nav-tab" data-view="powerPhase" type="button">Power Phase Explorer</button>
           <button class="nav-tab" data-view="game" type="button">Game</button>
+          <button class="nav-tab" data-view="history" type="button">Ride History</button>
           <button class="nav-tab" data-view="settings" type="button">Settings</button>
           <button class="nav-tab" data-view="climb" type="button">Doi Suthep Calculator</button>
         </nav>
@@ -188,6 +189,65 @@
         <section class="avg-card baseline-card" aria-label="1 minute versus 10 minute baseline">
           <p class="avg-label">1m vs 10m Baseline Delta</p>
           <div id="phaseBaselineGrid" class="phase-baseline-grid"></div>
+        </section>
+      </section>
+
+
+      <section id="historyView" class="view-panel" aria-label="Ride history explorer" hidden>
+        <section class="history-layout">
+          <article class="avg-card history-sidebar" aria-label="Past ride days">
+            <div class="history-header">
+              <div>
+                <p class="avg-label">Ride History</p>
+                <p class="phase-description">Browse saved ride days and inspect the stream data recorded in the database.</p>
+              </div>
+              <button id="refreshRideHistoryBtn" class="connect-btn secondary" type="button">Refresh</button>
+            </div>
+            <div id="rideHistoryStatus" class="history-status" aria-live="polite">Open this tab to load saved rides.</div>
+            <div id="rideHistoryList" class="history-list" role="list" aria-label="Saved rides"></div>
+          </article>
+
+          <section class="history-details">
+            <article class="avg-card history-summary-card" aria-label="Ride day summary">
+              <div class="history-summary-header">
+                <div>
+                  <p class="avg-label">Selected Day</p>
+                  <p id="rideHistoryTitle" class="history-title">No ride selected</p>
+                </div>
+                <p id="rideHistorySubtitle" class="phase-description">Choose a saved ride day to inspect totals and the stream trace.</p>
+              </div>
+              <div class="history-summary-grid">
+                <div class="history-stat"><span class="avg-sub-label">Total kJ</span><strong id="historyTotalKj" class="avg-value">--</strong></div>
+                <div class="history-stat"><span class="avg-sub-label">Avg power</span><strong id="historyAvgPower" class="avg-value">--</strong></div>
+                <div class="history-stat"><span class="avg-sub-label">Avg HR</span><strong id="historyAvgHr" class="avg-value">--</strong></div>
+                <div class="history-stat"><span class="avg-sub-label">Avg W / HR</span><strong id="historyAvgWPerHr" class="avg-value">--</strong></div>
+                <div class="history-stat"><span class="avg-sub-label">Samples</span><strong id="historySampleCount" class="avg-value">--</strong></div>
+                <div class="history-stat"><span class="avg-sub-label">Duration</span><strong id="historyDuration" class="avg-value">--</strong></div>
+              </div>
+            </article>
+
+            <article class="avg-card history-chart-card" aria-label="Ride day stream chart">
+              <div class="history-chart-header">
+                <p class="avg-label">Stream Timeline</p>
+                <p id="rideHistoryChartLabel" class="phase-description">Load a ride day to plot power and heart-rate samples.</p>
+              </div>
+              <div id="rideHistoryChart" class="history-chart" role="img" aria-label="Ride history chart"></div>
+            </article>
+
+            <article class="avg-card history-table-card" aria-label="Recent ride samples">
+              <p class="avg-label">Recent Samples</p>
+              <div class="history-table-wrap">
+                <table class="history-table">
+                  <thead>
+                    <tr><th>Time</th><th>Power</th><th>HR</th><th>W/HR</th></tr>
+                  </thead>
+                  <tbody id="rideHistorySamplesBody">
+                    <tr><td colspan="4">No ride selected.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </section>
         </section>
       </section>
 
