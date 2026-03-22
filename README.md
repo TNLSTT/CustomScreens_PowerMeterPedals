@@ -5,7 +5,7 @@ A minimal Web Bluetooth dashboard that connects to a cycling power meter (such a
 It also shows rolling average power for the last **1**, **3**, **5**, **10**, and **20** minutes, plus rolling average heart rate and watts per heart rate over those same windows.
 
 It also includes ride programming by target kilojoules (kJ), a ride recording control that hides once active, auto-reconnect attempts if pedals/heart rate disconnect, estimated breathing metrics (breaths/min and breaths per kJ), plus a 135 BPM guidance panel that suggests target watts from recent 5-minute response and ride-remaining work.
-The Power KJ Buckets widget can now be toggled on/off from Settings, and you can replace the default 3W bands with up to 7 custom watt-range buckets and custom kJ targets.
+The Power KJ Buckets widget can now be toggled on/off from Settings, and you can replace the default 3W bands with up to 7 custom buckets defined by lower-band watts, upper-band watts, and a kJ quantity.
 
 When enabled in Settings, the efficiency CSV report now includes breathing interaction columns (average breaths/min, breaths per kJ, watts per breath, HR per breath, and minute-over-minute deltas) so you can analyze breathing impact on heart rate and power.
 

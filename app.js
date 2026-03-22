@@ -3071,10 +3071,9 @@ function renderCustomBucketEditor() {
       const rowEl = document.createElement('div');
       rowEl.className = 'custom-bucket-editor-row';
       rowEl.append(
-        createCustomBucketNumberField(index, 'startWatts', 'Start watts', bucket.startWatts, 1, 1),
-        createCustomBucketNumberField(index, 'endWatts', 'End watts', bucket.endWatts, 1, 1),
-        createCustomBucketNumberField(index, 'targetKj', 'Target kJ', bucket.targetKj, 0.1, 0.1),
-        createCustomBucketSummary(index, bucket),
+        createCustomBucketNumberField(index, 'startWatts', 'Lower band watts', bucket.startWatts, 1, 1),
+        createCustomBucketNumberField(index, 'endWatts', 'Upper band watts', bucket.endWatts, 1, 1),
+        createCustomBucketNumberField(index, 'targetKj', 'kJ quantity', bucket.targetKj, 0.1, 0.1),
         createCustomBucketDeleteButton(index),
       );
       listEl.appendChild(rowEl);
@@ -3111,23 +3110,6 @@ function createCustomBucketNumberField(index, field, label, value, step, min) {
 
   labelEl.append(textEl, inputEl);
   return labelEl;
-}
-
-function createCustomBucketSummary(index, bucket) {
-  const summaryEl = document.createElement('div');
-  summaryEl.className = 'settings-row custom-bucket-summary';
-
-  const labelEl = document.createElement('span');
-  labelEl.className = 'settings-label';
-  labelEl.textContent = 'Band summary';
-
-  const valueEl = document.createElement('span');
-  valueEl.className = 'settings-value';
-  valueEl.textContent = `${bucket.startWatts}-${bucket.endWatts}W • ${formatNumber(bucket.targetKj, 1)} kJ`;
-  valueEl.id = `customBucketSummary${index}`;
-
-  summaryEl.append(labelEl, valueEl);
-  return summaryEl;
 }
 
 function createCustomBucketDeleteButton(index) {
