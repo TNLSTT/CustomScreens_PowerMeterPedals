@@ -321,7 +321,7 @@ body {
 
 .custom-bucket-editor-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
   gap: 0.55rem;
   align-items: end;
   padding: 0.75rem;
@@ -335,36 +335,21 @@ body {
   justify-content: flex-end;
 }
 
-.custom-bucket-field,
-.custom-bucket-summary {
+.custom-bucket-field {
   grid-template-columns: 1fr;
   align-items: start;
   gap: 0.35rem;
   min-width: 0;
 }
 
-.custom-bucket-field .settings-label,
-.custom-bucket-summary .settings-label {
+.custom-bucket-field .settings-label {
   font-size: 0.82rem;
 }
 
-.custom-bucket-field .settings-number-input,
-.custom-bucket-summary .settings-value {
+.custom-bucket-field .settings-number-input {
   min-width: 0;
 }
 
-.custom-bucket-summary .settings-value {
-  text-align: left;
-  min-height: 2.5rem;
-  display: flex;
-  align-items: center;
-  padding: 0.7rem 0.85rem;
-  border-radius: 0.8rem;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(2, 6, 23, 0.38);
-  color: #e2e8f0;
-  line-height: 1.25;
-}
 
 .custom-bucket-limit-note {
   margin: 0;

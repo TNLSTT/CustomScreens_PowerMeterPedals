@@ -258,7 +258,7 @@
         </section>
         <section class="avg-card settings-card" aria-label="Power KJ bucket settings">
           <p class="avg-label">Power KJ Buckets</p>
-          <p class="phase-description">Show or hide the dashboard bucket widget, and optionally replace the default bands with up to 7 custom watt/KJ ranges.</p>
+          <p class="phase-description">Show or hide the dashboard bucket widget, and optionally replace the default bands with up to 7 custom lower/upper watt bands and kJ quantities.</p>
           <div class="settings-grid">
             <label class="settings-row settings-checkbox-row" for="powerKjBucketsEnabledCheckbox">
               <span class="settings-label">Show Power KJ Buckets widget</span>
@@ -269,7 +269,7 @@
             <button id="addCustomBucketBtn" class="connect-btn secondary" type="button">Add Custom Bucket</button>
             <button id="resetCustomBucketsBtn" class="connect-btn" type="button">Reset to Default Buckets</button>
           </div>
-          <p class="phase-description">Leave the list empty to use the default 3W buckets. Custom buckets support a maximum of 7 rows.</p>
+          <p class="phase-description">Leave the list empty to use the default 3W buckets. Each custom row uses a lower watt band, upper watt band, and kJ quantity. Custom buckets support a maximum of 7 rows.</p>
           <div id="customBucketEditor" class="custom-bucket-editor" aria-label="Custom Power KJ bucket editor"></div>
         </section>
         <section class="avg-card settings-card" aria-label="Ride report exports">
