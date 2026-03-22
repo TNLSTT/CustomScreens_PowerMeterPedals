@@ -139,6 +139,13 @@ const resetWidgetLayoutBtnEl = document.getElementById("resetWidgetLayoutBtn");
 const openPopupGraphBtnEl = document.getElementById("openPopupGraphBtn");
 const openTextScalingPopupBtnEl = document.getElementById("openTextScalingPopupBtn");
 const reportEfficiencyCheckboxEl = document.getElementById("reportEfficiencyCheckbox");
+const addRideEventBtnEl = document.getElementById("addRideEventBtn");
+const resetRideEventsBtnEl = document.getElementById("resetRideEventsBtn");
+const rideEventsEditorEl = document.getElementById("rideEventsEditor");
+const rideEventOverlayEl = document.getElementById("rideEventOverlay");
+const rideEventOverlayLabelEl = document.getElementById("rideEventOverlayLabel");
+const rideEventOverlayGoalEl = document.getElementById("rideEventOverlayGoal");
+const rideEventOverlayCountdownEl = document.getElementById("rideEventOverlayCountdown");
 const powerKjBucketsCardEl = document.getElementById("powerKjBucketsCard");
 const powerKjBucketsSubtitleEl = document.getElementById("powerKjBucketsSubtitle");
 const powerKjBucketsGridEl = document.getElementById("powerKjBucketsGrid");
@@ -150,6 +157,7 @@ const resetCustomBucketsBtnEl = document.getElementById("resetCustomBucketsBtn")
 const WIDGET_LAYOUT_STORAGE_KEY = "widgetLayout:v1";
 const REPORT_EFFICIENCY_STORAGE_KEY = "reportEfficiencyEnabled:v1";
 const POWER_KJ_BUCKET_SETTINGS_STORAGE_KEY = "powerKjBucketSettings:v2";
+const RIDE_EVENT_SETTINGS_STORAGE_KEY = "rideEventSettings:v1";
 const POPUP_GRAPH_MIN_DURATION_SECONDS = 300;
 const POPUP_GRAPH_MAX_WATTS = 500;
 const WIDGET_TRANSFORM_LIMITS = {
@@ -191,6 +199,10 @@ const POWER_KJ_TARGET_HUMP_CENTER_WATTS = 215;
 const POWER_KJ_TARGET_HUMP_SPREAD_WATTS = 20;
 const POWER_KJ_TARGET_HUMP_WEIGHT = 0.7;
 const MAX_CUSTOM_POWER_KJ_BUCKETS = 7;
+const MAX_RIDE_EVENTS = 8;
+const RIDE_EVENT_FLASH_MS = 15000;
+const RIDE_EVENT_CONFIRM_WATTS = 0;
+const RIDE_EVENT_CONFIRM_SECONDS = 2;
 let powerDevice;
 let heartRateDevice;
 let powerCharacteristic;
@@ -218,6 +230,7 @@ let lastAutoNavigateAtMs = 0;
 const popupGraphPoints = [];
 const powerKjBuckets = [];
 const powerKjBucketSettings = createDefaultPowerKjBucketSettings();
+const rideEventSettings = createDefaultRideEventSettings();
 let lastPowerBucketSampleTimestamp = null;
 const GAME_SENSITIVITY_STORAGE_KEY = "gameSensitivityPercent:v1";
 const GAME_BEST_SCORE_STORAGE_KEY = "gameBestScore:v1";
@@ -240,6 +253,8 @@ const DOI_SUTHEP_MODEL = {
 
 let climbModelCalibration = null;
 let lastClimbCalculation = null;
+let activeRideEvent = null;
+let rideEventOverlayTimerId = null;
 
 const gameState = {
   riderYPercent: 50,
@@ -276,6 +291,8 @@ powerKjBucketsEnabledCheckboxEl?.addEventListener("change", () => {
 });
 addCustomBucketBtnEl?.addEventListener("click", addCustomPowerKjBucket);
 resetCustomBucketsBtnEl?.addEventListener("click", resetCustomPowerKjBuckets);
+addRideEventBtnEl?.addEventListener("click", addRideEventSetting);
+resetRideEventsBtnEl?.addEventListener("click", resetRideEventSettings);
 targetHrInputEl?.addEventListener("input", () => {
   updateTargetGuidanceLabel();
   recomputeRideHeartRateTotals();
@@ -304,6 +321,7 @@ renderPowerKjBuckets();
 initializeTextScaling();
 initializeReportSettings();
 initializePowerKjBucketSettings();
+initializeRideEventSettings();
 initializeWidgetLayoutSystem();
 initializeGameTab();
 initializeClimbCalculator();
@@ -483,7 +501,12 @@ function startRideRecording() {
     lastHeartRateWalkSecond: null,
     efficiencySamples: [],
     reportsDownloaded: false,
+    rideEvents: getConfiguredRideEvents(),
+    completedRideEvents: [],
+    pendingRideEventCount: 0,
   };
+  activeRideEvent = null;
+  stopRideEventOverlay();
   lastPowerSampleTimestamp = null;
   rideHeartRateSamples = [];
   popupGraphPoints.length = 0;
@@ -909,6 +932,114 @@ function accumulateRideEnergy(watts, timestamp) {
   rideState.joulesAccumulated += deltaJoules;
   rideState.activeSeconds += deltaSeconds;
   lastPowerSampleTimestamp = timestamp;
+  processRideEvents(timestamp, watts);
+}
+
+function processRideEvents(timestamp, watts) {
+  if (!rideState?.started || rideState.completed) {
+    return;
+  }
+
+  const rideEvents = Array.isArray(rideState.rideEvents) ? rideState.rideEvents : [];
+  for (const rideEvent of rideEvents) {
+    if (!rideEvent.triggered && rideState.doneKj >= rideEvent.targetKj) {
+      triggerRideEvent(rideEvent, timestamp);
+    }
+  }
+
+  const currentActiveRideEvent = activeRideEvent && rideEvents.includes(activeRideEvent) && !activeRideEvent.confirmed
+    ? activeRideEvent
+    : rideEvents.find((rideEvent) => rideEvent.triggered && !rideEvent.confirmed && !Number.isFinite(rideEvent.expiredAtTimestamp)) || null;
+
+  activeRideEvent = currentActiveRideEvent;
+  if (!currentActiveRideEvent) {
+    stopRideEventOverlay();
+    return;
+  }
+
+  const windowExpired = Number.isFinite(currentActiveRideEvent.overlayDeadlineTimestamp)
+    && timestamp >= currentActiveRideEvent.overlayDeadlineTimestamp;
+
+  if (windowExpired) {
+    currentActiveRideEvent.expiredAtTimestamp = currentActiveRideEvent.overlayDeadlineTimestamp;
+    currentActiveRideEvent.confirmationStartedAt = null;
+    activeRideEvent = null;
+    stopRideEventOverlay();
+    return;
+  }
+
+  if (Number.isFinite(watts) && watts <= RIDE_EVENT_CONFIRM_WATTS) {
+    if (!Number.isFinite(currentActiveRideEvent.confirmationStartedAt)) {
+      currentActiveRideEvent.confirmationStartedAt = timestamp;
+    }
+
+    const confirmElapsedSeconds = Math.max(0, (timestamp - currentActiveRideEvent.confirmationStartedAt) / 1000);
+    if (confirmElapsedSeconds >= RIDE_EVENT_CONFIRM_SECONDS) {
+      currentActiveRideEvent.confirmed = true;
+      currentActiveRideEvent.confirmedAtTimestamp = timestamp;
+      rideState.completedRideEvents = rideEvents.filter((rideEvent) => rideEvent.triggered);
+      activeRideEvent = null;
+      setStatus(`Ride event confirmed: ${currentActiveRideEvent.label}.`);
+      stopRideEventOverlay();
+      return;
+    }
+  } else {
+    currentActiveRideEvent.confirmationStartedAt = null;
+  }
+
+  showRideEventOverlay(currentActiveRideEvent, timestamp);
+  rideState.completedRideEvents = rideEvents.filter((rideEvent) => rideEvent.triggered);
+  rideState.pendingRideEventCount = rideEvents.filter((rideEvent) => rideEvent.triggered && !rideEvent.confirmed && !Number.isFinite(rideEvent.expiredAtTimestamp)).length;
+}
+
+function triggerRideEvent(rideEvent, timestamp) {
+  rideEvent.triggered = true;
+  rideEvent.triggeredAtTimestamp = timestamp;
+  rideEvent.triggeredAtKj = rideState?.doneKj ?? null;
+  rideEvent.overlayDeadlineTimestamp = timestamp + RIDE_EVENT_FLASH_MS;
+  rideState.completedRideEvents = (rideState.rideEvents || []).filter((event) => event.triggered);
+  setStatus(`Ride event: ${rideEvent.label}. Coast at 0W for 2s to confirm.`);
+  showRideEventOverlay(rideEvent, timestamp);
+}
+
+function showRideEventOverlay(rideEvent, timestamp = Date.now()) {
+  if (!rideEventOverlayEl || !rideEventOverlayLabelEl || !rideEventOverlayGoalEl || !rideEventOverlayCountdownEl) {
+    return;
+  }
+
+  const remainingMs = Math.max(0, (rideEvent.overlayDeadlineTimestamp || timestamp) - timestamp);
+  const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+  rideEventOverlayLabelEl.textContent = rideEvent.label;
+  rideEventOverlayGoalEl.textContent = `${formatNumber(rideEvent.targetKj, 1)} kJ reached • Coast at 0W for 2s to confirm`;
+  rideEventOverlayCountdownEl.textContent = rideEvent.confirmed
+    ? 'Confirmed'
+    : `${remainingSeconds}s remaining`;
+  rideEventOverlayEl.hidden = false;
+  rideEventOverlayEl.classList.add('active');
+
+  if (rideEventOverlayTimerId != null) {
+    clearTimeout(rideEventOverlayTimerId);
+  }
+
+  rideEventOverlayTimerId = window.setTimeout(() => {
+    if (activeRideEvent === rideEvent && !rideEvent.confirmed) {
+      showRideEventOverlay(rideEvent, Date.now());
+    }
+  }, 250);
+}
+
+function stopRideEventOverlay() {
+  if (rideEventOverlayTimerId != null) {
+    clearTimeout(rideEventOverlayTimerId);
+    rideEventOverlayTimerId = null;
+  }
+
+  if (!rideEventOverlayEl) {
+    return;
+  }
+
+  rideEventOverlayEl.hidden = true;
+  rideEventOverlayEl.classList.remove('active');
 }
 
 function createPowerKjBucket(startWatts, endWatts, targetKj) {
@@ -933,6 +1064,49 @@ function createDefaultPowerKjBucketSettings() {
     enabled: true,
     customBuckets: [],
   };
+}
+
+function createDefaultRideEventSettings() {
+  return {
+    events: [
+      { label: "Nutrition", targetKj: 100 },
+      { label: "Position Check", targetKj: 200 },
+    ],
+  };
+}
+
+function createRideEventDefinition(label, targetKj) {
+  return {
+    label: String(label || "Event").trim() || "Event",
+    targetKj: Number(targetKj),
+  };
+}
+
+function getConfiguredRideEvents() {
+  const configuredEvents = sanitizeRideEvents(rideEventSettings.events);
+  return configuredEvents
+    .map((event, index) => ({
+      id: `${index}-${event.label}-${event.targetKj}`,
+      label: event.label,
+      targetKj: event.targetKj,
+      triggered: false,
+      triggeredAtKj: null,
+      triggeredAtTimestamp: null,
+      confirmed: false,
+      confirmedAtTimestamp: null,
+      confirmationStartedAt: null,
+      expiredAtTimestamp: null,
+      overlayDeadlineTimestamp: null,
+    }))
+    .sort((left, right) => left.targetKj - right.targetKj);
+}
+
+function sanitizeRideEvents(events) {
+  return (Array.isArray(events) ? events : [])
+    .map((event) => createRideEventDefinition(event?.label, event?.targetKj))
+    .filter((event) => event.label && Number.isFinite(event.targetKj) && event.targetKj > 0)
+    .sort((left, right) => left.targetKj - right.targetKj)
+    .slice(0, MAX_RIDE_EVENTS);
 }
 
 function createDefaultPowerKjBuckets() {
@@ -3188,6 +3362,163 @@ function saveCustomPowerKjBuckets(nextBuckets, options = {}) {
   renderCustomBucketEditor();
 }
 
+function initializeRideEventSettings() {
+  try {
+    const storedRaw = localStorage.getItem(RIDE_EVENT_SETTINGS_STORAGE_KEY);
+    if (storedRaw) {
+      const stored = JSON.parse(storedRaw);
+      rideEventSettings.events = sanitizeRideEvents(stored?.events);
+    } else {
+      rideEventSettings.events = sanitizeRideEvents(rideEventSettings.events);
+    }
+  } catch (error) {
+    console.warn('Unable to restore ride event settings.', error);
+    rideEventSettings.events = sanitizeRideEvents(createDefaultRideEventSettings().events);
+  }
+
+  renderRideEventsEditor();
+}
+
+function persistRideEventSettings() {
+  localStorage.setItem(RIDE_EVENT_SETTINGS_STORAGE_KEY, JSON.stringify({
+    events: sanitizeRideEvents(rideEventSettings.events),
+  }));
+}
+
+function renderRideEventsEditor() {
+  if (!rideEventsEditorEl) {
+    return;
+  }
+
+  rideEventsEditorEl.innerHTML = '';
+  const events = sanitizeRideEvents(rideEventSettings.events);
+  rideEventSettings.events = events;
+
+  if (events.length === 0) {
+    const emptyEl = document.createElement('p');
+    emptyEl.className = 'custom-bucket-editor-empty';
+    emptyEl.textContent = 'No ride events yet. Add one to show a prompt at a target kJ milestone.';
+    rideEventsEditorEl.appendChild(emptyEl);
+  } else {
+    const listEl = document.createElement('div');
+    listEl.className = 'custom-bucket-editor-list';
+
+    events.forEach((event, index) => {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'custom-bucket-editor-row ride-event-editor-row';
+
+      rowEl.appendChild(createRideEventNumberField(index, 'targetKj', 'Trigger at', event.targetKj, 1, 1, 'kJ'));
+      rowEl.appendChild(createRideEventTextField(index, 'label', 'Label', event.label));
+
+      const actionsEl = document.createElement('div');
+      actionsEl.className = 'custom-bucket-editor-actions';
+      const removeBtnEl = document.createElement('button');
+      removeBtnEl.type = 'button';
+      removeBtnEl.className = 'connect-btn warning';
+      removeBtnEl.textContent = 'Remove';
+      removeBtnEl.addEventListener('click', () => removeRideEventSetting(index));
+      actionsEl.appendChild(removeBtnEl);
+      rowEl.appendChild(actionsEl);
+      listEl.appendChild(rowEl);
+    });
+
+    rideEventsEditorEl.appendChild(listEl);
+  }
+
+  const limitNoteEl = document.createElement('p');
+  limitNoteEl.className = 'custom-bucket-limit-note';
+  limitNoteEl.textContent = `${events.length}/${MAX_RIDE_EVENTS} ride events configured.`;
+  rideEventsEditorEl.appendChild(limitNoteEl);
+
+  if (addRideEventBtnEl) {
+    addRideEventBtnEl.disabled = events.length >= MAX_RIDE_EVENTS;
+  }
+}
+
+function createRideEventTextField(index, key, label, value) {
+  const fieldEl = document.createElement('label');
+  fieldEl.className = 'settings-row custom-bucket-field';
+  const textEl = document.createElement('span');
+  textEl.className = 'settings-label';
+  textEl.textContent = label;
+  const inputEl = document.createElement('input');
+  inputEl.className = 'ride-input settings-number-input';
+  inputEl.type = 'text';
+  inputEl.value = value;
+  inputEl.addEventListener('change', () => updateRideEventSetting(index, key, inputEl.value));
+  fieldEl.append(textEl, inputEl);
+  return fieldEl;
+}
+
+function createRideEventNumberField(index, key, label, value, step, min, unit) {
+  const fieldEl = document.createElement('label');
+  fieldEl.className = 'settings-row custom-bucket-field';
+  const textEl = document.createElement('span');
+  textEl.className = 'settings-label';
+  textEl.textContent = label;
+  const inputEl = document.createElement('input');
+  inputEl.className = 'ride-input settings-number-input';
+  inputEl.type = 'number';
+  inputEl.step = String(step);
+  inputEl.min = String(min);
+  inputEl.value = String(value);
+  inputEl.addEventListener('change', () => updateRideEventSetting(index, key, Number(inputEl.value)));
+  const unitEl = document.createElement('span');
+  unitEl.className = 'settings-value';
+  unitEl.textContent = unit;
+  fieldEl.append(textEl, inputEl, unitEl);
+  return fieldEl;
+}
+
+function addRideEventSetting() {
+  const events = sanitizeRideEvents(rideEventSettings.events);
+  if (events.length >= MAX_RIDE_EVENTS) {
+    return;
+  }
+
+  const nextTargetKj = events.length > 0 ? events[events.length - 1].targetKj + 50 : 100;
+  events.push(createRideEventDefinition(`Event ${events.length + 1}`, nextTargetKj));
+  rideEventSettings.events = events;
+  persistRideEventSettings();
+  renderRideEventsEditor();
+}
+
+function resetRideEventSettings() {
+  rideEventSettings.events = sanitizeRideEvents(createDefaultRideEventSettings().events);
+  persistRideEventSettings();
+  renderRideEventsEditor();
+}
+
+function removeRideEventSetting(index) {
+  rideEventSettings.events = sanitizeRideEvents(rideEventSettings.events).filter((_, eventIndex) => eventIndex !== index);
+  persistRideEventSettings();
+  renderRideEventsEditor();
+}
+
+function updateRideEventSetting(index, key, value) {
+  const nextEvents = (Array.isArray(rideEventSettings.events) ? rideEventSettings.events : []).map((event) => ({ ...event }));
+  if (!nextEvents[index]) {
+    return;
+  }
+
+  nextEvents[index][key] = value;
+  rideEventSettings.events = sanitizeRideEvents(nextEvents);
+  persistRideEventSettings();
+  renderRideEventsEditor();
+}
+
+function formatRideEventTimestamp(timestamp, rideStartTimestamp) {
+  if (!Number.isFinite(timestamp)) {
+    return '';
+  }
+
+  if (Number.isFinite(rideStartTimestamp)) {
+    return ((timestamp - rideStartTimestamp) / 1000).toFixed(2);
+  }
+
+  return new Date(timestamp).toISOString();
+}
+
 function initializeReportSettings() {
   if (!reportEfficiencyCheckboxEl) {
     return;
@@ -3282,6 +3613,7 @@ function buildEfficiencyReportCsv(currentRideState) {
   const minutes = Array.from(minuteBuckets.keys()).sort((left, right) => left - right);
   const heartRateWalkSamples = currentRideState.heartRateWalkSamples || [];
   const lines = ["minute,avg_watts,avg_heart_rate,avg_left_balance,avg_right_balance,avg_cadence,avg_breaths_per_min,breaths_per_kj,watts_per_breath,watts_per_heart_rate,heart_rate_per_breath,heart_rate_walk_in_minute,cumulative_heart_rate_walk,delta_watts_vs_prev_min,delta_heart_rate_vs_prev_min,delta_breaths_per_min_vs_prev_min,delta_left_balance_vs_prev_min,delta_right_balance_vs_prev_min"];
+  const rideEvents = Array.isArray(currentRideState.rideEvents) ? currentRideState.rideEvents : [];
   let previousMinuteAverages = null;
 
   minutes.forEach((minuteIndex) => {
@@ -3364,7 +3696,33 @@ function buildEfficiencyReportCsv(currentRideState) {
     };
   });
 
+  if (rideEvents.length > 0) {
+    lines.push('');
+    lines.push('ride_events');
+    lines.push('label,target_kj,triggered,confirmed,trigger_elapsed_seconds,confirm_elapsed_seconds,expired');
+    rideEvents.forEach((rideEvent) => {
+      lines.push([
+        escapeCsvValue(rideEvent.label),
+        Number.isFinite(rideEvent.targetKj) ? Number(rideEvent.targetKj).toFixed(2) : '',
+        rideEvent.triggered ? 'yes' : 'no',
+        rideEvent.confirmed ? 'yes' : 'no',
+        formatRideEventTimestamp(rideEvent.triggeredAtTimestamp, currentRideState.startTimestamp),
+        formatRideEventTimestamp(rideEvent.confirmedAtTimestamp, currentRideState.startTimestamp),
+        Number.isFinite(rideEvent.expiredAtTimestamp) ? 'yes' : 'no',
+      ].join(','));
+    });
+  }
+
   return lines.join("\n");
+}
+
+function escapeCsvValue(value) {
+  const stringValue = String(value ?? '');
+  if (!/[",\n]/.test(stringValue)) {
+    return stringValue;
+  }
+
+  return `"${stringValue.replaceAll('"', '""')}"`;
 }
 
 function initializeClimbCalculator() {
