@@ -530,6 +530,9 @@ function startRideRecording() {
     rideEvents: getConfiguredRideEvents(),
     completedRideEvents: [],
     pendingRideEventCount: 0,
+    savedToHistory: false,
+    savingToHistory: false,
+    savedRideId: null,
   };
   activeRideEvent = null;
   stopRideEventOverlay();
@@ -641,6 +644,124 @@ function updateRideProgressUi() {
     rideState.completionTimestamp = Date.now();
     setStatus(`Ride target complete: ${formatNumber(rideState.targetKj, 2)} kJ done.`);
     maybeDownloadRideReports();
+    void persistCompletedRide();
+  }
+}
+
+async function persistCompletedRide() {
+  if (!rideState?.completed || rideState.savingToHistory || rideState.savedToHistory) {
+    return;
+  }
+
+  const rideToPersist = rideState;
+  rideToPersist.savingToHistory = true;
+
+  try {
+    const ridePayload = buildRideHistoryPayload(rideToPersist);
+    const rideResponse = await fetch("/api/rides", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(ridePayload),
+    });
+
+    if (!rideResponse.ok) {
+      throw new Error(`Ride save failed (${rideResponse.status})`);
+    }
+
+    const rideResult = await rideResponse.json();
+    const rideId = Number(rideResult?.id);
+    if (!Number.isFinite(rideId)) {
+      throw new Error("Ride save did not return an id.");
+    }
+
+    const streamRows = buildRideStreamPayload(rideToPersist, rideId);
+    if (streamRows.length > 0) {
+      const streamResponse = await fetch("/api/ride-stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ rows: streamRows }),
+      });
+
+      if (!streamResponse.ok) {
+        throw new Error(`Ride stream save failed (${streamResponse.status})`);
+      }
+    }
+
+    rideToPersist.savedToHistory = true;
+    rideToPersist.savedRideId = rideId;
+    rideToPersist.savingToHistory = false;
+    await refreshRideHistoryAfterSave(rideId);
+    setStatus(`Ride saved to history: ${formatNumber(rideToPersist.doneKj, 2)} kJ recorded.`);
+  } catch (error) {
+    console.error("Failed to persist completed ride:", error);
+    rideToPersist.savingToHistory = false;
+    setStatus(`Ride finished, but saving to history failed: ${error.message}`);
+  }
+}
+
+function buildRideHistoryPayload(completedRideState) {
+  const averageWatts = completedRideState.activeSeconds > 0
+    ? completedRideState.joulesAccumulated / completedRideState.activeSeconds
+    : null;
+  const averageHeartRate = completedRideState.hrCount > 0
+    ? completedRideState.hrSum / completedRideState.hrCount
+    : null;
+  const averageWattsPerHeartRate = averageHeartRate > 0 && averageWatts != null
+    ? averageWatts / averageHeartRate
+    : null;
+  const rideDate = Number.isFinite(completedRideState.startTimestamp)
+    ? new Date(completedRideState.startTimestamp).toISOString()
+    : new Date().toISOString();
+
+  return {
+    date: rideDate,
+    total_kj: completedRideState.doneKj,
+    avg_power: averageWatts,
+    avg_hr: averageHeartRate,
+    avg_w_per_hr: averageWattsPerHeartRate,
+  };
+}
+
+function buildRideStreamPayload(completedRideState, rideId) {
+  const rideStartTimestamp = Number(completedRideState.startTimestamp);
+  const efficiencySamples = Array.isArray(completedRideState.efficiencySamples)
+    ? completedRideState.efficiencySamples
+    : [];
+
+  return efficiencySamples
+    .filter((sample) => Number.isFinite(Number(sample?.timestamp)))
+    .map((sample) => {
+      const power = Number(sample.watts);
+      const heartRate = Number(sample.heartRate);
+      const normalizedPower = Number.isFinite(power) ? power : null;
+      const normalizedHeartRate = Number.isFinite(heartRate) ? heartRate : null;
+      const wattsPerHeartRate = normalizedPower != null && normalizedHeartRate != null && normalizedHeartRate > 0
+        ? normalizedPower / normalizedHeartRate
+        : null;
+
+      return {
+        ride_id: rideId,
+        timestamp: Math.max(0, Math.round((Number(sample.timestamp) - rideStartTimestamp))),
+        power: normalizedPower,
+        hr: normalizedHeartRate,
+        w_per_hr: wattsPerHeartRate,
+      };
+    });
+}
+
+async function refreshRideHistoryAfterSave(rideId) {
+  rideHistoryState.loaded = false;
+  await loadRideHistory({ force: true });
+
+  if (Number.isFinite(Number(rideId))) {
+    rideHistoryState.selectedRideId = Number(rideId);
+    renderRideHistoryList();
+    renderRideHistoryDetails();
+    await loadRideStream(rideId);
   }
 }
 
